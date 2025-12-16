@@ -1,19 +1,40 @@
-const one = @import("one");
+const builtin = @import("builtin");
 const ansi = @import("ansi.zig");
 const theme_mod = @import("theme.zig");
+
+// Import platform-specific types via conditional compilation
+const is_wasm = builtin.cpu.arch == .wasm32;
+const render_buffer = if (is_wasm)
+    @import("../platform/render_buffer_web.zig")
+else
+    @import("../platform/render_buffer.zig");
+const terminal = if (is_wasm)
+    @import("../platform/terminal_web.zig")
+else
+    @import("../platform/terminal.zig");
+const input = if (is_wasm)
+    @import("../platform/input_web.zig")
+else
+    @import("../platform/input.zig");
+
+const types = @import("../core/types.zig");
+const Mode = types.Mode;
+const Key = input.Key;
+const RenderBuffer = render_buffer.RenderBuffer;
+const Terminal = terminal.Terminal;
 
 pub const Panel = enum { theme, mode };
 
 pub const Action = union(enum) {
     none,
     preview_theme: theme_mod.ThemeId,
-    apply_mode: one.Mode,
+    apply_mode: Mode,
     close,
     cancel: theme_mod.ThemeId,
 };
 
 const ModeOption = struct {
-    mode: one.Mode,
+    mode: Mode,
     label: []const u8,
 };
 
@@ -30,9 +51,9 @@ pub const Settings = struct {
     theme_index: usize = 0,
     mode_index: usize = 0,
     original_theme: theme_mod.ThemeId = .system,
-    original_mode: one.Mode = .words,
+    original_mode: Mode = .words,
 
-    pub fn open(self: *Settings, current_theme: theme_mod.ThemeId, current_mode: one.Mode) void {
+    pub fn open(self: *Settings, current_theme: theme_mod.ThemeId, current_mode: Mode) void {
         self.is_open = true;
         self.panel = .theme;
         self.original_theme = current_theme;
@@ -45,7 +66,7 @@ pub const Settings = struct {
         self.is_open = false;
     }
 
-    pub fn handleKey(self: *Settings, key: one.Key) Action {
+    pub fn handleKey(self: *Settings, key: Key) Action {
         if (!self.is_open) return .none;
 
         switch (key) {
@@ -109,11 +130,11 @@ pub const Settings = struct {
 
     pub fn renderOverlay(
         self: *const Settings,
-        buf: *one.RenderBuffer,
-        term: *one.Terminal,
+        buf: *RenderBuffer,
+        term: *Terminal,
         palette: *const theme_mod.Theme,
         theme_id: theme_mod.ThemeId,
-        current_mode: one.Mode,
+        current_mode: Mode,
     ) void {
         if (!self.is_open) return;
 
@@ -295,7 +316,7 @@ fn indexOfTheme(id: theme_mod.ThemeId) usize {
     return 0;
 }
 
-fn indexOfMode(mode: one.Mode) usize {
+fn indexOfMode(mode: Mode) usize {
     for (MODE_OPTIONS, 0..) |opt, i| {
         if (opt.mode == mode) return i;
     }
@@ -311,14 +332,14 @@ fn moveIndex(index: usize, len: usize, delta: i8) usize {
     return @intCast(next);
 }
 
-fn padSpaces(buf: *one.RenderBuffer, width: usize, used: usize) void {
+fn padSpaces(buf: *RenderBuffer, width: usize, used: usize) void {
     if (used >= width) return;
     const rem = width - used;
     for (0..rem) |_| buf.write(" ");
 }
 
 fn drawInnerDivider(
-    buf: *one.RenderBuffer,
+    buf: *RenderBuffer,
     x0: usize,
     y: usize,
     w: usize,
@@ -335,7 +356,7 @@ fn drawInnerDivider(
     buf.write(palette.base);
 }
 
-fn drawBox(buf: *one.RenderBuffer, x0: usize, y0: usize, w: usize, h: usize, palette: *const theme_mod.Theme) void {
+fn drawBox(buf: *RenderBuffer, x0: usize, y0: usize, w: usize, h: usize, palette: *const theme_mod.Theme) void {
     if (w < 2 or h < 2) return;
 
     buf.write(palette.border);

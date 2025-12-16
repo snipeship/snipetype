@@ -71,6 +71,14 @@ pub fn resolve(id: ThemeId) *const Theme {
 }
 
 fn systemPrefersLight() bool {
+    const builtin = @import("builtin");
+
+    if (comptime builtin.cpu.arch == .wasm32) {
+        // In browser, query via JavaScript
+        return js_system_prefers_light();
+    }
+
+    // Native: check COLORFGBG environment variable
     const raw = std.posix.getenv("COLORFGBG") orelse return false;
     const value = std.mem.sliceTo(raw, 0);
 
@@ -83,6 +91,9 @@ fn systemPrefersLight() bool {
     // Most terminals: 0-6 = dark bg colors, 7-15 = light bg colors.
     return bg >= 7;
 }
+
+// JavaScript import for WASM builds
+extern "env" fn js_system_prefers_light() bool;
 
 const THEMES = struct {
     pub const system_dark: Theme = .{

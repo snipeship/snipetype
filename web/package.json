@@ -1,0 +1,14 @@
+{
+  "name": "one-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot server.mjs",
+    "build:wasm": "cd .. && zig build web -Doptimize=ReleaseSmall && cp zig-out/bin/one_web.wasm web/dist/",
+    "build": "npm run build:wasm"
+  },
+  "dependencies": {
+    "ghostty-web": "^0.4.0"
+  }
+}

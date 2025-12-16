@@ -1,6 +1,7 @@
 //! Typing test state machine and stats.
 
 const std = @import("std");
+const time = @import("../platform/time.zig");
 
 const content = @import("content.zig");
 const metrics = @import("metrics.zig");
@@ -105,10 +106,10 @@ pub const TypingTest = struct {
             if (self.config.mode == .vim) {
                 // In vim mode, start on any key
                 self.state = .typing;
-                self.start_time = std.time.milliTimestamp();
+                self.start_time = time.milliTimestamp();
             } else if (key >= 32 and key < 127) {
                 self.state = .typing;
-                self.start_time = std.time.milliTimestamp();
+                self.start_time = time.milliTimestamp();
             }
         }
 
@@ -145,7 +146,7 @@ pub const TypingTest = struct {
 
     fn finishTest(self: *TypingTest) void {
         self.state = .finished;
-        self.end_time = std.time.milliTimestamp();
+        self.end_time = time.milliTimestamp();
         self.calculateStats();
     }
 
@@ -181,7 +182,7 @@ pub const TypingTest = struct {
 
     pub fn getElapsedSeconds(self: *const TypingTest) f64 {
         const start = self.start_time orelse return 0;
-        const end = self.end_time orelse std.time.milliTimestamp();
+        const end = self.end_time orelse time.milliTimestamp();
         const ms = end - start;
         return if (ms > 0) @as(f64, @floatFromInt(ms)) / 1000.0 else 0;
     }
@@ -194,7 +195,7 @@ pub const TypingTest = struct {
     pub fn getLiveWPM(self: *const TypingTest) f64 {
         if (self.state != .typing) return 0;
         const start = self.start_time orelse return 0;
-        const ms = std.time.milliTimestamp() - start;
+        const ms = time.milliTimestamp() - start;
         if (ms < 1000) return 0;
 
         const typed = if (self.config.mode == .vim)

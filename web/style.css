@@ -1,0 +1,102 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --one-bg: #1a1b26;
+    --one-fg: #abb2bf;
+}
+
+html,
+body {
+    height: 100%;
+    background-color: var(--one-bg);
+    color: var(--one-fg);
+    overflow: hidden;
+}
+
+#app {
+    height: 100%;
+    display: flex;
+    position: relative;
+}
+
+#terminal {
+    flex: 1;
+    overflow: hidden;
+    background-color: var(--one-bg);
+}
+
+#terminal canvas {
+    background-color: var(--one-bg);
+}
+
+#loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--one-bg);
+    z-index: 100;
+    transition: opacity 0.3s ease;
+}
+
+#loading.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-text {
+    color: #6366f1;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 18px;
+}
+
+.loading-text::after {
+    content: "";
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%,
+    20% {
+        content: "";
+    }
+    40% {
+        content: ".";
+    }
+    60% {
+        content: "..";
+    }
+    80%,
+    100% {
+        content: "...";
+    }
+}
+
+/* Terminal overrides */
+.xterm {
+    height: 100%;
+    width: 100%;
+    padding: 16px;
+}
+
+.xterm-viewport {
+    overflow-y: hidden !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+    display: none;
+}
+
+/* Focus outline for accessibility */
+#terminal:focus-within {
+    outline: 2px solid #6366f1;
+    outline-offset: -2px;
+}

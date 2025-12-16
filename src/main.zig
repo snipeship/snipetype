@@ -4,10 +4,12 @@ const std = @import("std");
 const one = @import("one");
 const posix = std.posix;
 const cli = @import("cli.zig");
-const ansi = @import("ui/ansi.zig");
-const render = @import("ui/render.zig");
-const theme = @import("ui/theme.zig");
-const settings = @import("ui/settings.zig");
+
+// Import UI modules through the one library
+const ansi = one.ansi;
+const render = one.render;
+const theme = one.theme;
+const settings = one.settings;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

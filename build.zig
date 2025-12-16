@@ -153,4 +153,44 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+
+    // ========================================================================
+    // WebAssembly Build (Browser)
+    // ========================================================================
+
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+        .abi = .none,
+    });
+
+    // Create the ONE module for WASM target
+    const mod_wasm = b.addModule("one", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+
+    // Create WASM executable
+    const wasm_exe = b.addExecutable(.{
+        .name = "one_web",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/web/main.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "one", .module = mod_wasm },
+            },
+        }),
+    });
+
+    // Export all public functions
+    wasm_exe.rdynamic = true;
+
+    // Install WASM artifact
+    const install_wasm = b.addInstallArtifact(wasm_exe, .{});
+
+    // Create 'web' build step
+    const web_step = b.step("web", "Build the WebAssembly version for browsers");
+    web_step.dependOn(&install_wasm.step);
 }

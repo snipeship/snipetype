@@ -1,13 +1,30 @@
-const one = @import("one");
+const builtin = @import("builtin");
 const ansi = @import("ansi.zig");
 const theme_mod = @import("theme.zig");
+
+// Import platform-specific types via conditional compilation
+const is_wasm = builtin.cpu.arch == .wasm32;
+const render_buffer = if (is_wasm)
+    @import("../platform/render_buffer_web.zig")
+else
+    @import("../platform/render_buffer.zig");
+const terminal = if (is_wasm)
+    @import("../platform/terminal_web.zig")
+else
+    @import("../platform/terminal.zig");
+
+const typing_test = @import("../core/typing_test.zig");
+
+const RenderBuffer = render_buffer.RenderBuffer;
+const Terminal = terminal.Terminal;
+const TypingTest = typing_test.TypingTest;
 
 const BOLD = ansi.BOLD;
 const CLEAR_LINE = ansi.CLEAR_LINE;
 
 // Render (words/sentences/code)
 
-pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
+pub fn renderSimple(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
     const cy = term.height / 2;
     const base = theme.base;
@@ -133,7 +150,7 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
 
 // Render (vim mode)
 
-pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
+pub fn renderVim(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
     const target_lines = t.target_lines.items;
     const vim = &t.vim;
@@ -141,6 +158,18 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
 
     const total_lines = @max(target_lines.len, vim.buffer.lineCount());
     const start_y = (term.height -| total_lines -| 6) / 2 + 3;
+
+    // When the vim buffer shrinks (e.g. deleting many newlines), the content area can move
+    // and we must clear lines that are no longer drawn to avoid leaving stale text behind.
+    const content_start_y: usize = 4;
+    const content_end_y: usize = term.height -| 3;
+    if (content_end_y >= content_start_y) {
+        var y: usize = content_start_y;
+        while (y <= content_end_y) : (y += 1) {
+            buf.moveTo(0, y);
+            buf.write(CLEAR_LINE);
+        }
+    }
 
     buf.moveTo(cx -| 1, 1);
     buf.write(BOLD);
@@ -338,7 +367,7 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
 
 // Helpers
 
-fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme, y: usize) void {
+fn renderResults(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *const theme_mod.Theme, y: usize) void {
     const cx = term.width / 2;
     const wpm = t.getWPM();
     const acc = t.getAccuracy();
@@ -384,7 +413,7 @@ fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
     buf.write(base);
 }
 
-fn renderFooter(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
+fn renderFooter(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
     const base = theme.base;
 

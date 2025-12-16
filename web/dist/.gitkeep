@@ -1,0 +1,2 @@
+# This directory contains the compiled WASM file.
+# Run 'npm run build:wasm' to generate one_web.wasm

@@ -1,10 +1,12 @@
 //! ONE - Core library exports
+//! Platform-specific implementations are selected at compile time.
 
+const builtin = @import("builtin");
+const is_wasm = builtin.cpu.arch == .wasm32;
+
+// Core modules (platform-independent)
 const types = @import("core/types.zig");
 const rng = @import("core/rng.zig");
-const render_buffer = @import("platform/render_buffer.zig");
-const terminal = @import("platform/terminal.zig");
-const input = @import("platform/input.zig");
 const vim_cursor = @import("vim/cursor.zig");
 const vim_mode = @import("vim/mode.zig");
 const vim_operator = @import("vim/operator.zig");
@@ -12,6 +14,32 @@ const vim_buffer = @import("vim/buffer.zig");
 const vim_editor = @import("vim/editor.zig");
 const typing_test = @import("core/typing_test.zig");
 
+// UI modules
+pub const ansi = @import("ui/ansi.zig");
+pub const render = @import("ui/render.zig");
+pub const theme = @import("ui/theme.zig");
+pub const settings = @import("ui/settings.zig");
+
+// Platform modules (exposed for web entry point)
+pub const time = @import("platform/time.zig");
+
+// Platform-specific modules (selected at compile time)
+const render_buffer = if (is_wasm)
+    @import("platform/render_buffer_web.zig")
+else
+    @import("platform/render_buffer.zig");
+
+const terminal = if (is_wasm)
+    @import("platform/terminal_web.zig")
+else
+    @import("platform/terminal.zig");
+
+const input = if (is_wasm)
+    @import("platform/input_web.zig")
+else
+    @import("platform/input.zig");
+
+// Public exports
 pub const Mode = types.Mode;
 pub const Lang = types.Lang;
 pub const Config = types.Config;
