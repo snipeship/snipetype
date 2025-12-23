@@ -32,7 +32,7 @@ pub const TypingTest = struct {
 
     pub fn init(allocator: std.mem.Allocator, seed: u64, config: Config) !TypingTest {
         var rng = Rng.init(seed);
-        const target = content.generateTarget(&rng, allocator, config);
+        const target = try content.generateTarget(&rng, allocator, config);
 
         var target_lines = std.ArrayList([]const u8){};
         var start: usize = 0;
@@ -74,7 +74,7 @@ pub const TypingTest = struct {
         self.target_lines.clearRetainingCapacity();
 
         var rng = Rng.init(seed);
-        const target = content.generateTarget(&rng, self.allocator, self.config);
+        const target = try content.generateTarget(&rng, self.allocator, self.config);
         self.target_text = target;
 
         var start: usize = 0;
@@ -136,7 +136,7 @@ pub const TypingTest = struct {
 
     fn checkVimCompletion(self: *TypingTest) void {
         // Get current buffer text and compare to target
-        const typed = self.vim.buffer.toText(self.allocator);
+        const typed = self.vim.buffer.toText(self.allocator) catch return;
         defer self.allocator.free(typed);
 
         if (std.mem.eql(u8, typed, self.target_text)) {
@@ -162,7 +162,7 @@ pub const TypingTest = struct {
         self.errors = 0;
 
         const typed = if (self.config.mode == .vim)
-            self.vim.buffer.toText(self.allocator)
+            self.vim.buffer.toText(self.allocator) catch return
         else
             self.allocator.dupe(u8, self.typed.items) catch return;
         defer self.allocator.free(typed);
@@ -215,7 +215,7 @@ pub const TypingTest = struct {
         if (ms < 1000) return 0;
 
         const typed = if (self.config.mode == .vim)
-            self.vim.buffer.toText(self.allocator)
+            self.vim.buffer.toText(self.allocator) catch return 0
         else
             self.allocator.dupe(u8, self.typed.items) catch return 0;
         defer self.allocator.free(typed);
