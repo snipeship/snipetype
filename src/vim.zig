@@ -214,9 +214,7 @@ pub const Buffer = struct {
     }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIM EDITOR - Full vim implementation
-// ═══════════════════════════════════════════════════════════════════════════════
+// Vim editor
 
 pub const VimEditor = struct {
     buffer: Buffer,
