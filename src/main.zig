@@ -6,6 +6,8 @@ const posix = std.posix;
 const cli = @import("cli.zig");
 const ansi = @import("ui/ansi.zig");
 const render = @import("ui/render.zig");
+const theme = @import("ui/theme.zig");
+const settings = @import("ui/settings.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -41,6 +43,8 @@ pub fn main() !void {
     var last_render: i64 = 0;
 
     var input = one.Input.init();
+    var theme_id: theme.ThemeId = .system;
+    var settings_ui = settings.Settings{};
 
     while (true) {
         const prev_w = term.width;
@@ -56,12 +60,47 @@ pub fn main() !void {
         // Input
         while (input.readKey()) |key| {
             switch (key) {
-                .Byte => |b| switch (b) {
-                    0x03 => { // Ctrl+C always quits
+                .Byte => |b| {
+                    if (b == 0x03) { // Ctrl+C always quits
                         buf.clear();
-                        buf.write(ansi.CLEAR ++ ansi.SHOW_CURSOR);
+                        buf.write(ansi.RESET ++ ansi.CLEAR ++ ansi.SHOW_CURSOR);
                         buf.flush();
                         return;
+                    }
+                },
+                else => {},
+            }
+
+            if (settings_ui.is_open) {
+                const action = settings_ui.handleKey(key);
+                switch (action) {
+                    .none => {},
+                    .preview_theme => |id| {
+                        theme_id = id;
+                        needs_full_clear = true;
+                    },
+                    .apply_mode => |mode| {
+                        test_state.config.mode = mode;
+                        seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+                        try test_state.reset(seed);
+                        needs_full_clear = true;
+                        last_state = test_state.state;
+                    },
+                    .close => needs_full_clear = true,
+                    .cancel => |id| {
+                        theme_id = id;
+                        needs_full_clear = true;
+                    },
+                }
+                dirty = true;
+                continue;
+            }
+
+            switch (key) {
+                .Byte => |b| switch (b) {
+                    0x10 => { // Ctrl+P
+                        settings_ui.open(theme_id, test_state.config.mode);
+                        dirty = true;
                     },
                     0x1b => { // Escape
                         if (test_state.config.mode == .vim) {
@@ -69,7 +108,7 @@ pub fn main() !void {
                             dirty = true;
                         } else {
                             buf.clear();
-                            buf.write(ansi.CLEAR ++ ansi.SHOW_CURSOR);
+                            buf.write(ansi.RESET ++ ansi.CLEAR ++ ansi.SHOW_CURSOR);
                             buf.flush();
                             return;
                         }
@@ -109,15 +148,18 @@ pub fn main() !void {
 
             buf.clear();
             buf.write(ansi.SYNC_BEGIN);
+            const palette = theme.resolve(theme_id);
+            buf.write(palette.base);
             if (needs_full_clear) {
                 buf.write(ansi.CLEAR);
                 needs_full_clear = false;
             }
             if (test_state.config.mode == .vim) {
-                render.renderVim(&buf, &term, &test_state);
+                render.renderVim(&buf, &term, &test_state, palette);
             } else {
-                render.renderSimple(&buf, &term, &test_state);
+                render.renderSimple(&buf, &term, &test_state, palette);
             }
+            settings_ui.renderOverlay(&buf, &term, palette, theme_id, test_state.config.mode);
             buf.write(ansi.SYNC_END);
             buf.flush();
         }
