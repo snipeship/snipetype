@@ -39,14 +39,12 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
     }
     buf.write(RESET);
 
-    // Divider
     buf.moveTo(cx -| 20, 4);
     buf.write(C_DIMMER);
     var i: usize = 0;
     while (i < 40) : (i += 1) buf.write("─");
     buf.write(RESET);
 
-    // Stats line
     buf.moveTo(0, cy -| 2);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, cy -| 2);
@@ -85,7 +83,6 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
         },
     }
 
-    // Main text
     buf.moveTo(0, cy);
     buf.write(CLEAR_LINE);
 
