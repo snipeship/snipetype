@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const constants = @import("../core/constants.zig");
 const Buffer = @import("buffer.zig").Buffer;
 const Cursor = @import("cursor.zig").Cursor;
 const VimMode = @import("mode.zig").VimMode;
@@ -82,7 +83,7 @@ pub const VimEditor = struct {
         }
         if (key >= '0' and key <= '9' and self.count > 0) {
             self.count = self.count * 10 + (key - '0');
-            if (self.count > 999) self.count = 999;
+            if (self.count > constants.MAX_VIM_COUNT) self.count = constants.MAX_VIM_COUNT;
             return;
         }
 

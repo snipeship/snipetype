@@ -3,6 +3,7 @@
 const std = @import("std");
 const time = @import("../platform/time.zig");
 
+const constants = @import("constants.zig");
 const content = @import("content.zig");
 const metrics = @import("metrics.zig");
 const types = @import("types.zig");
@@ -196,7 +197,7 @@ pub const TypingTest = struct {
         if (self.state != .typing) return 0;
         const start = self.start_time orelse return 0;
         const ms = time.milliTimestamp() - start;
-        if (ms < 1000) return 0;
+        if (ms < constants.MIN_WPM_MS) return 0;
 
         const typed = if (self.config.mode == .vim)
             self.vim.buffer.toText(self.allocator) catch return 0

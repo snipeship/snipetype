@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const constants = @import("constants.zig");
 const types = @import("types.zig");
 const Config = types.Config;
 const Lang = types.Lang;
@@ -326,10 +327,10 @@ pub fn generateTarget(rng: *Rng, allocator: std.mem.Allocator, config: Config) !
 }
 
 fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) ![]u8 {
-    const n = @min(count, 50);
+    const n = @min(count, constants.MAX_WORDS);
     if (n == 0) return allocator.alloc(u8, 0);
     var len: usize = 0;
-    var sel: [50][]const u8 = undefined;
+    var sel: [constants.MAX_WORDS][]const u8 = undefined;
     for (0..n) |i| {
         sel[i] = common_words[rng.range(common_words.len)];
         len += sel[i].len;
@@ -349,10 +350,10 @@ fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) ![]u8 {
 
 fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) ![]u8 {
     var len: usize = 0;
-    var sel: [10][]const u8 = undefined;
+    var sel: [constants.MAX_SENTENCES][]const u8 = undefined;
     var cnt: usize = 0;
     var words: usize = 0;
-    while (words < word_target and cnt < 10) {
+    while (words < word_target and cnt < constants.MAX_SENTENCES) {
         sel[cnt] = sentences[rng.range(sentences.len)];
         len += sel[cnt].len + 1;
         for (sel[cnt]) |c| if (c == ' ') {
@@ -387,10 +388,10 @@ fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) ![
         .mixed => banks[rng.range(banks.len)],
     };
 
-    const n = @min(count, 20);
+    const n = @min(count, constants.MAX_CODE_SNIPPETS);
     if (n == 0) return allocator.alloc(u8, 0);
     var len: usize = 0;
-    var sel: [20][]const u8 = undefined;
+    var sel: [constants.MAX_CODE_SNIPPETS][]const u8 = undefined;
     for (0..n) |i| {
         sel[i] = bank[rng.range(bank.len)];
         len += sel[i].len;
