@@ -12,6 +12,7 @@ pub const AnsiRenderer = struct {
     term_height: usize,
     default_fg: Color,
     default_bg: Color,
+    use_terminal_defaults: bool,
 
     pub fn init(allocator: std.mem.Allocator, width: usize, height: usize) AnsiRenderer {
         return .{
@@ -21,6 +22,7 @@ pub const AnsiRenderer = struct {
             .term_height = height,
             .default_fg = Color.WHITE,
             .default_bg = Color.BLACK,
+            .use_terminal_defaults = false,
         };
     }
 
@@ -58,6 +60,7 @@ pub const AnsiRenderer = struct {
         .getWidth = getWidth,
         .getHeight = getHeight,
         .setDefaultColors = setDefaultColors,
+        .setUseTerminalDefaults = setUseTerminalDefaults,
     };
 
     fn moveTo(ptr: *anyopaque, x: usize, y: usize) void {
@@ -87,9 +90,11 @@ pub const AnsiRenderer = struct {
     fn resetStyle(ptr: *anyopaque) void {
         const self = cast(ptr);
         self.appendSlice("\x1b[0m");
-        // Re-apply default colors
-        self.appendFmt("\x1b[38;2;{d};{d};{d}m", .{ self.default_fg.r, self.default_fg.g, self.default_fg.b });
-        self.appendFmt("\x1b[48;2;{d};{d};{d}m", .{ self.default_bg.r, self.default_bg.g, self.default_bg.b });
+        // Only re-apply colors if not using terminal defaults
+        if (!self.use_terminal_defaults) {
+            self.appendFmt("\x1b[38;2;{d};{d};{d}m", .{ self.default_fg.r, self.default_fg.g, self.default_fg.b });
+            self.appendFmt("\x1b[48;2;{d};{d};{d}m", .{ self.default_bg.r, self.default_bg.g, self.default_bg.b });
+        }
     }
 
     fn write(ptr: *anyopaque, s: []const u8) void {
@@ -140,6 +145,11 @@ pub const AnsiRenderer = struct {
         const self = cast(ptr);
         self.default_fg = fg;
         self.default_bg = bg;
+    }
+
+    fn setUseTerminalDefaults(ptr: *anyopaque, use_defaults: bool) void {
+        const self = cast(ptr);
+        self.use_terminal_defaults = use_defaults;
     }
 
     // ========================================================================
