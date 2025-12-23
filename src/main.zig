@@ -5,8 +5,6 @@ const one = @import("one");
 const posix = std.posix;
 const cli = @import("cli.zig");
 
-const ansi = one.ansi;
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -25,11 +23,14 @@ pub fn main() !void {
     try term.enableRawMode();
     defer term.restore();
 
-    var buf = one.RenderBuffer.init(allocator);
-    defer buf.deinit();
+    var ansi_renderer = one.AnsiRenderer.init(allocator, term.width, term.height);
+    defer ansi_renderer.deinit();
 
-    buf.write(ansi.CLEAR ++ ansi.HIDE_CURSOR);
-    buf.flush();
+    // Initial setup: clear screen and hide cursor
+    ansi_renderer.hideCursor();
+    var r = ansi_renderer.renderer();
+    r.clear();
+    r.flush();
 
     const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
     var app = try one.App.init(allocator, seed, config);
@@ -43,6 +44,7 @@ pub fn main() !void {
         const prev_h = term.height;
         term.updateSize();
         if (term.width != prev_w or term.height != prev_h) {
+            ansi_renderer.setSize(term.width, term.height);
             app.onResize();
         }
 
@@ -52,17 +54,19 @@ pub fn main() !void {
         while (input.readKey()) |key| {
             // Handle Ctrl+C specially - always quits in native
             if (key == .Byte and key.Byte == 0x03) {
-                buf.clear();
-                buf.write(ansi.RESET ++ ansi.CLEAR ++ ansi.SHOW_CURSOR);
-                buf.flush();
+                ansi_renderer.clearBuffer();
+                r.clear();
+                ansi_renderer.showCursor();
+                r.flush();
                 return;
             }
 
             const result = app.handleKey(key, false);
             if (result == .quit) {
-                buf.clear();
-                buf.write(ansi.RESET ++ ansi.CLEAR ++ ansi.SHOW_CURSOR);
-                buf.flush();
+                ansi_renderer.clearBuffer();
+                r.clear();
+                ansi_renderer.showCursor();
+                r.flush();
                 return;
             }
         }
@@ -72,7 +76,10 @@ pub fn main() !void {
 
         // Render if needed
         if (app.shouldRender(now)) {
-            app.render(&buf, &term);
+            ansi_renderer.beginSync();
+            app.render(r);
+            ansi_renderer.endSync();
+            r.flush();
         }
 
         // Poll for input with appropriate timeout
