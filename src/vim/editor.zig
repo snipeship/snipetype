@@ -146,37 +146,47 @@ pub const VimEditor = struct {
             },
             'G' => motions.moveToLastLine(&self.buffer, &self.cursor, self.mode),
 
-            // Insert mode
-            'i' => self.mode = .insert,
+            // Insert mode (save undo state before entering)
+            'i' => {
+                self.saveUndoState();
+                self.mode = .insert;
+            },
             'I' => {
+                self.saveUndoState();
                 motions.moveToFirstNonBlank(&self.buffer, &self.cursor);
                 self.mode = .insert;
             },
             'a' => {
+                self.saveUndoState();
                 motions.moveRight(&self.buffer, &self.cursor, self.mode, 1);
                 self.mode = .insert;
             },
             'A' => {
+                self.saveUndoState();
                 motions.moveToEndOfLine(&self.buffer, &self.cursor);
                 self.cursor.col = self.buffer.lineLen(self.cursor.row);
                 self.mode = .insert;
             },
             'o' => {
+                self.saveUndoState();
                 self.buffer.insertLine(self.cursor.row + 1, "");
                 self.cursor.row += 1;
                 self.cursor.col = 0;
                 self.mode = .insert;
             },
             'O' => {
+                self.saveUndoState();
                 self.buffer.insertLine(self.cursor.row, "");
                 self.cursor.col = 0;
                 self.mode = .insert;
             },
             's' => {
+                self.saveUndoState();
                 self.buffer.deleteChar(self.cursor);
                 self.mode = .insert;
             },
             'S' => {
+                self.saveUndoState();
                 self.buffer.deleteLine(self.cursor.row);
                 self.buffer.insertLine(self.cursor.row, "");
                 self.cursor.col = 0;
