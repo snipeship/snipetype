@@ -9,6 +9,7 @@ const Register = @import("register.zig").Register;
 const UndoStack = @import("undo.zig").UndoStack;
 const motions = @import("motions.zig");
 const operators = @import("operators.zig");
+const Key = @import("../platform/input.zig").Key;
 
 pub const VimEditor = struct {
     buffer: Buffer,
@@ -78,6 +79,36 @@ pub const VimEditor = struct {
             .normal => self.handleNormal(key),
             .insert => self.handleInsert(key),
             .visual, .visual_line => self.handleVisual(key),
+        }
+    }
+
+    /// Handle arrow key input (works in all modes like neovim)
+    pub fn handleArrow(self: *VimEditor, key: Key) void {
+        self.status_msg = "";
+
+        switch (key) {
+            // Basic arrows - character/line movement
+            .ArrowLeft => motions.moveLeft(&self.cursor, 1),
+            .ArrowRight => motions.moveRight(&self.buffer, &self.cursor, self.mode, 1),
+            .ArrowUp => motions.moveUp(&self.buffer, &self.cursor, self.mode, 1),
+            .ArrowDown => motions.moveDown(&self.buffer, &self.cursor, self.mode, 1),
+
+            // Shift+Arrow - word movement (like b/w)
+            .ShiftArrowLeft => motions.moveWordBackward(&self.buffer, &self.cursor, self.mode, 1),
+            .ShiftArrowRight => motions.moveWordForward(&self.buffer, &self.cursor, self.mode, 1),
+
+            // Ctrl+Arrow - word movement (same as Shift in neovim)
+            .CtrlArrowLeft => motions.moveWordBackward(&self.buffer, &self.cursor, self.mode, 1),
+            .CtrlArrowRight => motions.moveWordForward(&self.buffer, &self.cursor, self.mode, 1),
+
+            // Ctrl+Up/Down - document navigation (like gg/G)
+            .CtrlArrowUp => {
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+            },
+            .CtrlArrowDown => motions.moveToLastLine(&self.buffer, &self.cursor, self.mode),
+
+            else => {},
         }
     }
 
