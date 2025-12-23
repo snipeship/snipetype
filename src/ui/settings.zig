@@ -54,13 +54,13 @@ pub const Settings = struct {
         if (!self.is_open) return .none;
 
         switch (key) {
-            .ArrowUp => return self.moveSelection(-1),
-            .ArrowDown => return self.moveSelection(1),
-            .ArrowLeft => {
+            .ArrowUp, .CtrlArrowUp => return self.moveSelection(-1),
+            .ArrowDown, .CtrlArrowDown => return self.moveSelection(1),
+            .ArrowLeft, .ShiftArrowLeft, .CtrlArrowLeft => {
                 self.panel = .theme;
                 return .none;
             },
-            .ArrowRight => {
+            .ArrowRight, .ShiftArrowRight, .CtrlArrowRight => {
                 self.panel = .mode;
                 return .none;
             },
