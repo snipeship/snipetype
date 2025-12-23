@@ -9,12 +9,43 @@ const constants = @import("../core/constants.zig");
 
 const is_wasm = builtin.cpu.arch == .wasm32;
 
+/// Parse modified arrow key from escape sequence \x1b[1;{mod}{dir}
+/// modifier: '2' = Shift, '5' = Ctrl
+/// direction: 'A' = Up, 'B' = Down, 'C' = Right, 'D' = Left
+fn parseModifiedArrow(modifier: u8, direction: u8) ?Key {
+    return switch (modifier) {
+        '2' => switch (direction) { // Shift
+            'C' => .ShiftArrowRight,
+            'D' => .ShiftArrowLeft,
+            else => null,
+        },
+        '5' => switch (direction) { // Ctrl
+            'A' => .CtrlArrowUp,
+            'B' => .CtrlArrowDown,
+            'C' => .CtrlArrowRight,
+            'D' => .CtrlArrowLeft,
+            else => null,
+        },
+        else => null,
+    };
+}
+
 pub const Key = union(enum) {
     Byte: u8,
+    // Plain arrows
     ArrowUp,
     ArrowDown,
     ArrowLeft,
     ArrowRight,
+    // Shift+Arrow (word movement)
+    ShiftArrowLeft,
+    ShiftArrowRight,
+    // Ctrl+Arrow (word movement)
+    CtrlArrowLeft,
+    CtrlArrowRight,
+    // Ctrl+Up/Down (document navigation)
+    CtrlArrowUp,
+    CtrlArrowDown,
 };
 
 pub const Input = if (is_wasm) WasmInput else NativeInput;
