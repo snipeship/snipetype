@@ -48,18 +48,6 @@ function startServer(port) {
       let pathname = decodeURIComponent(url.pathname);
       if (pathname === "/") pathname = "/index.html";
 
-      // ghostty-web falls back to fetching `/ghostty-vt.wasm` in some environments.
-      if (pathname === "/ghostty-vt.wasm") {
-        const ghosttyWasmPath = resolve(
-          WEB_ROOT,
-          "node_modules/ghostty-web/dist/ghostty-vt.wasm",
-        );
-        return (
-          (await fileResponse(ghosttyWasmPath)) ||
-          new Response("Not found", { status: 404, headers: withNoStore() })
-        );
-      }
-
       const resolvedPath = safeResolvePathname(pathname);
       if (!resolvedPath)
         return new Response("Not found", {
