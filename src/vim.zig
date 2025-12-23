@@ -410,12 +410,20 @@ pub const VimEditor = struct {
                 }
             },
             'D' => {
-                const content = self.buffer.deleteToEndOfLine(self.cursor);
+                const content = self.buffer.deleteToEndOfLine(self.cursor) catch {
+                    self.status_msg = "out of memory";
+                    return;
+                };
+                defer self.allocator.free(content);
                 self.setYank(content, false);
                 self.clampCursor();
             },
             'C' => {
-                const content = self.buffer.deleteToEndOfLine(self.cursor);
+                const content = self.buffer.deleteToEndOfLine(self.cursor) catch {
+                    self.status_msg = "out of memory";
+                    return;
+                };
+                defer self.allocator.free(content);
                 self.setYank(content, false);
                 self.mode = .insert;
             },
@@ -439,23 +447,43 @@ pub const VimEditor = struct {
 
     fn handleOperatorMotion(self: *VimEditor, key: u8, count: usize) void {
         const op = self.pending_op;
-        self.pending_op = .none;
+
+        if (self.pending_g) {
+            self.pending_g = false;
+            if (key == 'g') {
+                const start = self.op_start;
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+                self.opLineRange(op, @min(start.row, self.cursor.row), @max(start.row, self.cursor.row));
+                self.pending_op = .none;
+                return;
+            }
+        }
 
         // Double key (dd, cc, yy)
         switch (key) {
             'd' => if (op == .delete) {
                 self.opLineRange(op, self.cursor.row, self.cursor.row + count - 1);
+                self.pending_op = .none;
                 return;
             },
             'c' => if (op == .change) {
                 self.opLineRange(op, self.cursor.row, self.cursor.row + count - 1);
+                self.pending_op = .none;
                 return;
             },
             'y' => if (op == .yank) {
                 self.opLineRange(op, self.cursor.row, self.cursor.row + count - 1);
+                self.pending_op = .none;
                 return;
             },
             else => {},
+        }
+
+        if (key == 'g') {
+            self.pending_g = true;
+            self.op_start = self.cursor;
+            return;
         }
 
         // Motion
@@ -472,16 +500,14 @@ pub const VimEditor = struct {
             '0' => self.cursor.col = 0,
             '^' => self.moveToFirstNonBlank(),
             'G' => self.moveToLastLine(),
-            'g' => {
-                // gg
-                self.cursor.row = 0;
-                self.cursor.col = 0;
+            else => {
+                self.pending_op = .none;
+                return;
             },
-            else => return,
         }
 
         // Apply operator to range
-        if (key == 'j' or key == 'k' or key == 'G' or key == 'g') {
+        if (key == 'j' or key == 'k' or key == 'G') {
             // Line-wise
             const from = @min(start.row, self.cursor.row);
             const to = @max(start.row, self.cursor.row);
@@ -490,6 +516,7 @@ pub const VimEditor = struct {
             // Character-wise
             self.opCharRange(op, start, self.cursor);
         }
+        self.pending_op = .none;
     }
 
     fn opLineRange(self: *VimEditor, op: Operator, from_row: usize, to_row: usize) void {
@@ -540,7 +567,15 @@ pub const VimEditor = struct {
 
         // Single line for now
         if (from.row == to.row) {
-            const content = self.buffer.deleteRange(from, .{ .row = to.row, .col = to.col + 1 });
+            const content = switch (op) {
+                .delete, .change => self.buffer.deleteRange(from, .{ .row = to.row, .col = to.col + 1 }),
+                .yank => self.buffer.copyRange(from, .{ .row = to.row, .col = to.col + 1 }),
+                .none => return,
+            } catch {
+                self.status_msg = "out of memory";
+                return;
+            };
+            defer self.allocator.free(content);
             self.setYank(content, false);
             self.cursor = from;
             self.clampCursor();
@@ -637,7 +672,11 @@ pub const VimEditor = struct {
                 to = tmp;
             }
             if (from.row == to.row) {
-                const content = self.buffer.deleteRange(from, .{ .row = to.row, .col = to.col + 1 });
+                const content = self.buffer.deleteRange(from, .{ .row = to.row, .col = to.col + 1 }) catch {
+                    self.status_msg = "out of memory";
+                    return;
+                };
+                defer self.allocator.free(content);
                 self.setYank(content, false);
             }
             self.cursor = from;
