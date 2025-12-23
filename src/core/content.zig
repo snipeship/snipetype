@@ -1,3 +1,5 @@
+//! Target text generation (words/sentences/code/vim snippets).
+
 const std = @import("std");
 
 const types = @import("types.zig");

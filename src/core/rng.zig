@@ -1,3 +1,5 @@
+//! Simple deterministic RNG helpers.
+
 pub const Rng = struct {
     state: u64,
 

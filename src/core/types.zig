@@ -1,3 +1,5 @@
+//! Shared config types (mode/lang/config).
+
 const std = @import("std");
 
 pub const Mode = enum {
