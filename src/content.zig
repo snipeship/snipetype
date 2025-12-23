@@ -314,24 +314,25 @@ const code_c = [_][]const u8{
     "#define MAX 100",
 };
 
-pub fn generateTarget(rng: *Rng, allocator: std.mem.Allocator, config: Config) []u8 {
+pub fn generateTarget(rng: *Rng, allocator: std.mem.Allocator, config: Config) ![]u8 {
     return switch (config.mode) {
-        .words => genWords(rng, allocator, config.word_count),
-        .sentences => genSentences(rng, allocator, config.word_count),
-        .code => genCode(rng, allocator, config.word_count, config.lang),
-        .vim => genVimSnippet(rng, allocator, config.lang),
+        .words => try genWords(rng, allocator, config.word_count),
+        .sentences => try genSentences(rng, allocator, config.word_count),
+        .code => try genCode(rng, allocator, config.word_count, config.lang),
+        .vim => try genVimSnippet(rng, allocator, config.lang),
     };
 }
 
-fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) []u8 {
+fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) ![]u8 {
     const n = @min(count, 50);
+    if (n == 0) return allocator.alloc(u8, 0);
     var len: usize = 0;
     var sel: [50][]const u8 = undefined;
     for (0..n) |i| {
         sel[i] = common_words[rng.range(common_words.len)];
         len += sel[i].len;
     }
-    const buf = allocator.alloc(u8, len + n - 1) catch return &[_]u8{};
+    const buf = try allocator.alloc(u8, len + n - 1);
     var pos: usize = 0;
     for (0..n) |i| {
         @memcpy(buf[pos..][0..sel[i].len], sel[i]);
@@ -344,7 +345,7 @@ fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) []u8 {
     return buf;
 }
 
-fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) []u8 {
+fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) ![]u8 {
     var len: usize = 0;
     var sel: [10][]const u8 = undefined;
     var cnt: usize = 0;
@@ -358,8 +359,8 @@ fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) []u
         words += 1;
         cnt += 1;
     }
-    if (cnt == 0) return &[_]u8{};
-    const buf = allocator.alloc(u8, len - 1) catch return &[_]u8{};
+    if (cnt == 0) return allocator.alloc(u8, 0);
+    const buf = try allocator.alloc(u8, len - 1);
     var pos: usize = 0;
     for (0..cnt) |i| {
         @memcpy(buf[pos..][0..sel[i].len], sel[i]);
@@ -372,7 +373,7 @@ fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) []u
     return buf;
 }
 
-fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) []u8 {
+fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) ![]u8 {
     const banks = [_][]const []const u8{ &code_zig, &code_rust, &code_go, &code_ts, &code_python, &code_c };
     const bank: []const []const u8 = switch (lang) {
         .zig => &code_zig,
@@ -385,13 +386,14 @@ fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) []
     };
 
     const n = @min(count, 20);
+    if (n == 0) return allocator.alloc(u8, 0);
     var len: usize = 0;
     var sel: [20][]const u8 = undefined;
     for (0..n) |i| {
         sel[i] = bank[rng.range(bank.len)];
         len += sel[i].len;
     }
-    const buf = allocator.alloc(u8, len + n - 1) catch return &[_]u8{};
+    const buf = try allocator.alloc(u8, len + n - 1);
     var pos: usize = 0;
     for (0..n) |i| {
         @memcpy(buf[pos..][0..sel[i].len], sel[i]);
@@ -404,7 +406,7 @@ fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) []
     return buf;
 }
 
-fn genVimSnippet(rng: *Rng, allocator: std.mem.Allocator, lang: Lang) []u8 {
+fn genVimSnippet(rng: *Rng, allocator: std.mem.Allocator, lang: Lang) ![]u8 {
     const all_snippets = [_][]const []const u8{
         &vim_snippets_zig,
         &vim_snippets_rust,
@@ -425,6 +427,5 @@ fn genVimSnippet(rng: *Rng, allocator: std.mem.Allocator, lang: Lang) []u8 {
     };
 
     const snippet = bank[rng.range(bank.len)];
-    const buf = allocator.dupe(u8, snippet) catch return &[_]u8{};
-    return buf;
+    return try allocator.dupe(u8, snippet);
 }
