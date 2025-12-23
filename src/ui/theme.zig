@@ -1,42 +1,48 @@
-const std = @import("std");
-const ansi = @import("ansi.zig");
+//! Theme definitions using RGB colors.
+//! Colors are the single source of truth - ANSI codes are generated on-demand.
 
-pub const ThemeId = enum {
-    system,
-    one_dark,
-    one_light,
-    dracula,
-    nord,
-    gruvbox_dark,
-    solarized_dark,
+const std = @import("std");
+const Color = @import("color.zig").Color;
+
+pub const ThemeId = enum(u8) {
+    system = 0,
+    one_dark = 1,
+    one_light = 2,
+    dracula = 3,
+    nord = 4,
+    gruvbox_dark = 5,
+    solarized_dark = 6,
 };
 
 pub const Theme = struct {
     name: []const u8,
 
-    bg: []const u8,
-    fg: []const u8,
-    base: []const u8,
+    // Base colors
+    bg: Color,
+    fg: Color,
 
-    accent: []const u8,
-    success: []const u8,
-    danger: []const u8,
-    warning: []const u8,
-    extra: []const u8,
-    info: []const u8,
+    // Semantic colors
+    accent: Color,
+    success: Color,
+    danger: Color,
+    warning: Color,
+    extra: Color,
+    info: Color,
 
-    dim: []const u8,
-    dimmer: []const u8,
+    // Text emphasis
+    dim: Color,
+    dimmer: Color,
 
-    cursor_bg: []const u8,
-    cursor_insert_bg: []const u8,
-    cursor_fg: []const u8,
+    // Cursor
+    cursor_bg: Color,
+    cursor_insert_bg: Color,
+    cursor_fg: Color,
 
-    error_bg: []const u8,
-    visual_bg: []const u8,
-    visual_fg: []const u8,
-
-    border: []const u8,
+    // Special
+    error_bg: Color,
+    visual_bg: Color,
+    visual_fg: Color,
+    border: Color,
 };
 
 pub const ThemeOption = struct {
@@ -60,7 +66,7 @@ pub fn options() []const ThemeOption {
 
 pub fn resolve(id: ThemeId) *const Theme {
     return switch (id) {
-        .system => if (systemPrefersLight()) &THEMES.system_light else &THEMES.system_dark,
+        .system => if (systemPrefersLight()) &THEMES.one_light else &THEMES.one_dark,
         .one_dark => &THEMES.one_dark,
         .one_light => &THEMES.one_light,
         .dracula => &THEMES.dracula,
@@ -74,7 +80,6 @@ fn systemPrefersLight() bool {
     const builtin = @import("builtin");
 
     if (comptime builtin.cpu.arch == .wasm32) {
-        // In browser, query via JavaScript
         return js_system_prefers_light();
     }
 
@@ -87,188 +92,140 @@ fn systemPrefersLight() bool {
     while (it.next()) |part| last = part;
     const last_part = last orelse return false;
 
-    const bg = std.fmt.parseInt(u8, last_part, 10) catch return false;
-    // Most terminals: 0-6 = dark bg colors, 7-15 = light bg colors.
-    return bg >= 7;
+    const bg_val = std.fmt.parseInt(u8, last_part, 10) catch return false;
+    return bg_val >= 7;
 }
 
-// JavaScript import for WASM builds
 extern "env" fn js_system_prefers_light() bool;
 
-const THEMES = struct {
-    pub const system_dark: Theme = .{
+// ============================================================================
+// Theme Definitions
+// ============================================================================
+
+pub const THEMES = struct {
+    pub const one_dark = Theme{
         .name = "ONE Dark",
-        .bg = "",
-        .fg = "",
-        .base = ansi.RESET,
-        .accent = "\x1b[38;2;99;102;241m",
-        .success = "\x1b[38;2;34;197;94m",
-        .danger = "\x1b[38;2;239;68;68m",
-        .warning = "\x1b[38;2;250;204;21m",
-        .extra = "\x1b[38;2;251;146;60m",
-        .info = "\x1b[38;2;34;211;238m",
-        .dim = "\x1b[38;2;100;100;120m",
-        .dimmer = "\x1b[38;2;60;60;80m",
-        .cursor_bg = "\x1b[48;2;99;102;241m",
-        .cursor_insert_bg = "\x1b[48;2;34;197;94m",
-        .cursor_fg = "\x1b[38;2;255;255;255m",
-        .error_bg = "\x1b[48;2;50;20;20m",
-        .visual_bg = "\x1b[48;2;60;60;100m",
-        .visual_fg = "\x1b[38;2;255;255;255m",
-        .border = "\x1b[38;2;60;60;80m",
+        .bg = Color.rgb(40, 44, 52),
+        .fg = Color.rgb(171, 178, 191),
+        .accent = Color.rgb(99, 102, 241),
+        .success = Color.rgb(34, 197, 94),
+        .danger = Color.rgb(239, 68, 68),
+        .warning = Color.rgb(250, 204, 21),
+        .extra = Color.rgb(251, 146, 60),
+        .info = Color.rgb(34, 211, 238),
+        .dim = Color.rgb(100, 100, 120),
+        .dimmer = Color.rgb(60, 60, 80),
+        .cursor_bg = Color.rgb(99, 102, 241),
+        .cursor_insert_bg = Color.rgb(34, 197, 94),
+        .cursor_fg = Color.rgb(255, 255, 255),
+        .error_bg = Color.rgb(50, 20, 20),
+        .visual_bg = Color.rgb(60, 60, 100),
+        .visual_fg = Color.rgb(255, 255, 255),
+        .border = Color.rgb(60, 60, 80),
     };
 
-    pub const system_light: Theme = .{
+    pub const one_light = Theme{
         .name = "ONE Light",
-        .bg = "",
-        .fg = "",
-        .base = ansi.RESET,
-        .accent = "\x1b[38;2;79;70;229m",
-        .success = "\x1b[38;2;22;163;74m",
-        .danger = "\x1b[38;2;220;38;38m",
-        .warning = "\x1b[38;2;161;98;7m",
-        .extra = "\x1b[38;2;234;88;12m",
-        .info = "\x1b[38;2;8;145;178m",
-        .dim = "\x1b[38;2;71;85;105m",
-        .dimmer = "\x1b[38;2;148;163;184m",
-        .cursor_bg = "\x1b[48;2;79;70;229m",
-        .cursor_insert_bg = "\x1b[48;2;22;163;74m",
-        .cursor_fg = "\x1b[38;2;255;255;255m",
-        .error_bg = "\x1b[48;2;254;226;226m",
-        .visual_bg = "\x1b[48;2;224;231;255m",
-        .visual_fg = "\x1b[38;2;15;23;42m",
-        .border = "\x1b[38;2;148;163;184m",
+        .bg = Color.rgb(250, 250, 250),
+        .fg = Color.rgb(15, 23, 42),
+        .accent = Color.rgb(79, 70, 229),
+        .success = Color.rgb(22, 163, 74),
+        .danger = Color.rgb(220, 38, 38),
+        .warning = Color.rgb(161, 98, 7),
+        .extra = Color.rgb(234, 88, 12),
+        .info = Color.rgb(8, 145, 178),
+        .dim = Color.rgb(71, 85, 105),
+        .dimmer = Color.rgb(148, 163, 184),
+        .cursor_bg = Color.rgb(79, 70, 229),
+        .cursor_insert_bg = Color.rgb(22, 163, 74),
+        .cursor_fg = Color.rgb(255, 255, 255),
+        .error_bg = Color.rgb(254, 226, 226),
+        .visual_bg = Color.rgb(224, 231, 255),
+        .visual_fg = Color.rgb(15, 23, 42),
+        .border = Color.rgb(148, 163, 184),
     };
 
-    pub const one_dark: Theme = .{
-        .name = "ONE Dark",
-        .bg = "\x1b[48;2;40;44;52m",
-        .fg = "\x1b[38;2;171;178;191m",
-        .base = ansi.RESET ++ "\x1b[48;2;40;44;52m" ++ "\x1b[38;2;171;178;191m",
-        .accent = "\x1b[38;2;99;102;241m",
-        .success = "\x1b[38;2;34;197;94m",
-        .danger = "\x1b[38;2;239;68;68m",
-        .warning = "\x1b[38;2;250;204;21m",
-        .extra = "\x1b[38;2;251;146;60m",
-        .info = "\x1b[38;2;34;211;238m",
-        .dim = "\x1b[38;2;100;100;120m",
-        .dimmer = "\x1b[38;2;60;60;80m",
-        .cursor_bg = "\x1b[48;2;99;102;241m",
-        .cursor_insert_bg = "\x1b[48;2;34;197;94m",
-        .cursor_fg = "\x1b[38;2;255;255;255m",
-        .error_bg = "\x1b[48;2;50;20;20m",
-        .visual_bg = "\x1b[48;2;60;60;100m",
-        .visual_fg = "\x1b[38;2;255;255;255m",
-        .border = "\x1b[38;2;60;60;80m",
-    };
-
-    pub const one_light: Theme = .{
-        .name = "ONE Light",
-        .bg = "\x1b[48;2;250;250;250m",
-        .fg = "\x1b[38;2;15;23;42m",
-        .base = ansi.RESET ++ "\x1b[48;2;250;250;250m" ++ "\x1b[38;2;15;23;42m",
-        .accent = "\x1b[38;2;79;70;229m",
-        .success = "\x1b[38;2;22;163;74m",
-        .danger = "\x1b[38;2;220;38;38m",
-        .warning = "\x1b[38;2;161;98;7m",
-        .extra = "\x1b[38;2;234;88;12m",
-        .info = "\x1b[38;2;8;145;178m",
-        .dim = "\x1b[38;2;71;85;105m",
-        .dimmer = "\x1b[38;2;148;163;184m",
-        .cursor_bg = "\x1b[48;2;79;70;229m",
-        .cursor_insert_bg = "\x1b[48;2;22;163;74m",
-        .cursor_fg = "\x1b[38;2;255;255;255m",
-        .error_bg = "\x1b[48;2;254;226;226m",
-        .visual_bg = "\x1b[48;2;224;231;255m",
-        .visual_fg = "\x1b[38;2;15;23;42m",
-        .border = "\x1b[38;2;148;163;184m",
-    };
-
-    pub const dracula: Theme = .{
+    pub const dracula = Theme{
         .name = "Dracula",
-        .bg = "\x1b[48;2;40;42;54m",
-        .fg = "\x1b[38;2;248;248;242m",
-        .base = ansi.RESET ++ "\x1b[48;2;40;42;54m" ++ "\x1b[38;2;248;248;242m",
-        .accent = "\x1b[38;2;189;147;249m",
-        .success = "\x1b[38;2;80;250;123m",
-        .danger = "\x1b[38;2;255;85;85m",
-        .warning = "\x1b[38;2;241;250;140m",
-        .extra = "\x1b[38;2;255;184;108m",
-        .info = "\x1b[38;2;139;233;253m",
-        .dim = "\x1b[38;2;98;114;164m",
-        .dimmer = "\x1b[38;2;68;71;90m",
-        .cursor_bg = "\x1b[48;2;189;147;249m",
-        .cursor_insert_bg = "\x1b[48;2;80;250;123m",
-        .cursor_fg = "\x1b[38;2;40;42;54m",
-        .error_bg = "\x1b[48;2;68;71;90m",
-        .visual_bg = "\x1b[48;2;68;71;90m",
-        .visual_fg = "\x1b[38;2;248;248;242m",
-        .border = "\x1b[38;2;98;114;164m",
+        .bg = Color.rgb(40, 42, 54),
+        .fg = Color.rgb(248, 248, 242),
+        .accent = Color.rgb(189, 147, 249),
+        .success = Color.rgb(80, 250, 123),
+        .danger = Color.rgb(255, 85, 85),
+        .warning = Color.rgb(241, 250, 140),
+        .extra = Color.rgb(255, 184, 108),
+        .info = Color.rgb(139, 233, 253),
+        .dim = Color.rgb(98, 114, 164),
+        .dimmer = Color.rgb(68, 71, 90),
+        .cursor_bg = Color.rgb(189, 147, 249),
+        .cursor_insert_bg = Color.rgb(80, 250, 123),
+        .cursor_fg = Color.rgb(40, 42, 54),
+        .error_bg = Color.rgb(68, 71, 90),
+        .visual_bg = Color.rgb(68, 71, 90),
+        .visual_fg = Color.rgb(248, 248, 242),
+        .border = Color.rgb(98, 114, 164),
     };
 
-    pub const nord: Theme = .{
+    pub const nord = Theme{
         .name = "Nord",
-        .bg = "\x1b[48;2;46;52;64m",
-        .fg = "\x1b[38;2;236;239;244m",
-        .base = ansi.RESET ++ "\x1b[48;2;46;52;64m" ++ "\x1b[38;2;236;239;244m",
-        .accent = "\x1b[38;2;129;161;193m",
-        .success = "\x1b[38;2;163;190;140m",
-        .danger = "\x1b[38;2;191;97;106m",
-        .warning = "\x1b[38;2;235;203;139m",
-        .extra = "\x1b[38;2;208;135;112m",
-        .info = "\x1b[38;2;136;192;208m",
-        .dim = "\x1b[38;2;76;86;106m",
-        .dimmer = "\x1b[38;2;59;66;82m",
-        .cursor_bg = "\x1b[48;2;129;161;193m",
-        .cursor_insert_bg = "\x1b[48;2;163;190;140m",
-        .cursor_fg = "\x1b[38;2;46;52;64m",
-        .error_bg = "\x1b[48;2;59;66;82m",
-        .visual_bg = "\x1b[48;2;59;66;82m",
-        .visual_fg = "\x1b[38;2;236;239;244m",
-        .border = "\x1b[38;2;76;86;106m",
+        .bg = Color.rgb(46, 52, 64),
+        .fg = Color.rgb(236, 239, 244),
+        .accent = Color.rgb(129, 161, 193),
+        .success = Color.rgb(163, 190, 140),
+        .danger = Color.rgb(191, 97, 106),
+        .warning = Color.rgb(235, 203, 139),
+        .extra = Color.rgb(208, 135, 112),
+        .info = Color.rgb(136, 192, 208),
+        .dim = Color.rgb(76, 86, 106),
+        .dimmer = Color.rgb(59, 66, 82),
+        .cursor_bg = Color.rgb(129, 161, 193),
+        .cursor_insert_bg = Color.rgb(163, 190, 140),
+        .cursor_fg = Color.rgb(46, 52, 64),
+        .error_bg = Color.rgb(59, 66, 82),
+        .visual_bg = Color.rgb(59, 66, 82),
+        .visual_fg = Color.rgb(236, 239, 244),
+        .border = Color.rgb(76, 86, 106),
     };
 
-    pub const gruvbox_dark: Theme = .{
+    pub const gruvbox_dark = Theme{
         .name = "Gruvbox Dark",
-        .bg = "\x1b[48;2;40;40;40m",
-        .fg = "\x1b[38;2;235;219;178m",
-        .base = ansi.RESET ++ "\x1b[48;2;40;40;40m" ++ "\x1b[38;2;235;219;178m",
-        .accent = "\x1b[38;2;250;189;47m",
-        .success = "\x1b[38;2;152;151;26m",
-        .danger = "\x1b[38;2;204;36;29m",
-        .warning = "\x1b[38;2;215;153;33m",
-        .extra = "\x1b[38;2;254;128;25m",
-        .info = "\x1b[38;2;131;165;152m",
-        .dim = "\x1b[38;2;146;131;116m",
-        .dimmer = "\x1b[38;2;102;92;84m",
-        .cursor_bg = "\x1b[48;2;102;92;84m",
-        .cursor_insert_bg = "\x1b[48;2;152;151;26m",
-        .cursor_fg = "\x1b[38;2;251;241;199m",
-        .error_bg = "\x1b[48;2;60;56;54m",
-        .visual_bg = "\x1b[48;2;80;73;69m",
-        .visual_fg = "\x1b[38;2;251;241;199m",
-        .border = "\x1b[38;2;146;131;116m",
+        .bg = Color.rgb(40, 40, 40),
+        .fg = Color.rgb(235, 219, 178),
+        .accent = Color.rgb(250, 189, 47),
+        .success = Color.rgb(152, 151, 26),
+        .danger = Color.rgb(204, 36, 29),
+        .warning = Color.rgb(215, 153, 33),
+        .extra = Color.rgb(254, 128, 25),
+        .info = Color.rgb(131, 165, 152),
+        .dim = Color.rgb(146, 131, 116),
+        .dimmer = Color.rgb(102, 92, 84),
+        .cursor_bg = Color.rgb(102, 92, 84),
+        .cursor_insert_bg = Color.rgb(152, 151, 26),
+        .cursor_fg = Color.rgb(251, 241, 199),
+        .error_bg = Color.rgb(60, 56, 54),
+        .visual_bg = Color.rgb(80, 73, 69),
+        .visual_fg = Color.rgb(251, 241, 199),
+        .border = Color.rgb(146, 131, 116),
     };
 
-    pub const solarized_dark: Theme = .{
+    pub const solarized_dark = Theme{
         .name = "Solarized Dark",
-        .bg = "\x1b[48;2;0;43;54m",
-        .fg = "\x1b[38;2;131;148;150m",
-        .base = ansi.RESET ++ "\x1b[48;2;0;43;54m" ++ "\x1b[38;2;131;148;150m",
-        .accent = "\x1b[38;2;38;139;210m",
-        .success = "\x1b[38;2;133;153;0m",
-        .danger = "\x1b[38;2;220;50;47m",
-        .warning = "\x1b[38;2;181;137;0m",
-        .extra = "\x1b[38;2;203;75;22m",
-        .info = "\x1b[38;2;42;161;152m",
-        .dim = "\x1b[38;2;88;110;117m",
-        .dimmer = "\x1b[38;2;101;123;131m",
-        .cursor_bg = "\x1b[48;2;38;139;210m",
-        .cursor_insert_bg = "\x1b[48;2;133;153;0m",
-        .cursor_fg = "\x1b[38;2;0;43;54m",
-        .error_bg = "\x1b[48;2;7;54;66m",
-        .visual_bg = "\x1b[48;2;7;54;66m",
-        .visual_fg = "\x1b[38;2;131;148;150m",
-        .border = "\x1b[38;2;88;110;117m",
+        .bg = Color.rgb(0, 43, 54),
+        .fg = Color.rgb(131, 148, 150),
+        .accent = Color.rgb(38, 139, 210),
+        .success = Color.rgb(133, 153, 0),
+        .danger = Color.rgb(220, 50, 47),
+        .warning = Color.rgb(181, 137, 0),
+        .extra = Color.rgb(203, 75, 22),
+        .info = Color.rgb(42, 161, 152),
+        .dim = Color.rgb(88, 110, 117),
+        .dimmer = Color.rgb(101, 123, 131),
+        .cursor_bg = Color.rgb(38, 139, 210),
+        .cursor_insert_bg = Color.rgb(133, 153, 0),
+        .cursor_fg = Color.rgb(0, 43, 54),
+        .error_bg = Color.rgb(7, 54, 66),
+        .visual_bg = Color.rgb(7, 54, 66),
+        .visual_fg = Color.rgb(131, 148, 150),
+        .border = Color.rgb(88, 110, 117),
     };
 };
