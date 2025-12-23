@@ -1,27 +1,11 @@
-const builtin = @import("builtin");
 const ansi = @import("ansi.zig");
 const theme_mod = @import("theme.zig");
 
-// Import platform-specific types via conditional compilation
-const is_wasm = builtin.cpu.arch == .wasm32;
-const render_buffer = if (is_wasm)
-    @import("../platform/render_buffer_web.zig")
-else
-    @import("../platform/render_buffer.zig");
-const terminal = if (is_wasm)
-    @import("../platform/terminal_web.zig")
-else
-    @import("../platform/terminal.zig");
-const input = if (is_wasm)
-    @import("../platform/input_web.zig")
-else
-    @import("../platform/input.zig");
-
-const types = @import("../core/types.zig");
-const Mode = types.Mode;
-const Key = input.Key;
-const RenderBuffer = render_buffer.RenderBuffer;
-const Terminal = terminal.Terminal;
+// Import platform types from consolidated modules
+const RenderBuffer = @import("../platform/render_buffer.zig").RenderBuffer;
+const Terminal = @import("../platform/terminal.zig").Terminal;
+const Key = @import("../platform/input.zig").Key;
+const Mode = @import("../core/types.zig").Mode;
 
 pub const Panel = enum { theme, mode };
 

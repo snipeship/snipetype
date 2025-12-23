@@ -1,23 +1,10 @@
-const builtin = @import("builtin");
 const ansi = @import("ansi.zig");
 const theme_mod = @import("theme.zig");
 
-// Import platform-specific types via conditional compilation
-const is_wasm = builtin.cpu.arch == .wasm32;
-const render_buffer = if (is_wasm)
-    @import("../platform/render_buffer_web.zig")
-else
-    @import("../platform/render_buffer.zig");
-const terminal = if (is_wasm)
-    @import("../platform/terminal_web.zig")
-else
-    @import("../platform/terminal.zig");
-
-const typing_test = @import("../core/typing_test.zig");
-
-const RenderBuffer = render_buffer.RenderBuffer;
-const Terminal = terminal.Terminal;
-const TypingTest = typing_test.TypingTest;
+// Import platform types from consolidated modules
+const RenderBuffer = @import("../platform/render_buffer.zig").RenderBuffer;
+const Terminal = @import("../platform/terminal.zig").Terminal;
+const TypingTest = @import("../core/typing_test.zig").TypingTest;
 
 const BOLD = ansi.BOLD;
 const CLEAR_LINE = ansi.CLEAR_LINE;
