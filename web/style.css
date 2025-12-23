@@ -5,7 +5,7 @@
 }
 
 :root {
-    --one-bg: #1a1b26;
+    --one-bg: #282c34;
     --one-fg: #abb2bf;
 }
 
@@ -20,17 +20,24 @@ body {
 #app {
     height: 100%;
     display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
 }
 
 #terminal {
-    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     background-color: var(--one-bg);
 }
 
 #terminal canvas {
-    background-color: var(--one-bg);
+    outline: none;
+    border-radius: 4px;
 }
 
 #loading {
@@ -80,23 +87,8 @@ body {
     }
 }
 
-/* Terminal overrides */
-.xterm {
-    height: 100%;
-    width: 100%;
-    padding: 16px;
-}
-
-.xterm-viewport {
-    overflow-y: hidden !important;
-}
-
-.xterm-viewport::-webkit-scrollbar {
-    display: none;
-}
-
 /* Focus outline for accessibility */
-#terminal:focus-within {
+#terminal canvas:focus {
     outline: 2px solid #6366f1;
     outline-offset: -2px;
 }
