@@ -53,10 +53,7 @@ pub const RenderBuffer = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) RenderBuffer {
-        return .{
-            .data = std.ArrayList(u8){},
-            .allocator = allocator,
-        };
+        return .{ .data = std.ArrayList(u8){}, .allocator = allocator };
     }
 
     pub fn deinit(self: *RenderBuffer) void {
@@ -91,7 +88,7 @@ pub const RenderBuffer = struct {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TERMINAL HANDLING
+// TERMINAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub const Terminal = struct {
@@ -101,11 +98,8 @@ pub const Terminal = struct {
 
     pub fn init() !Terminal {
         const current = try posix.tcgetattr(posix.STDIN_FILENO);
-
-        // Get terminal size
         var ws: posix.winsize = .{ .row = 24, .col = 80, .xpixel = 0, .ypixel = 0 };
         _ = posix.system.ioctl(posix.STDOUT_FILENO, posix.T.IOCGWINSZ, @intFromPtr(&ws));
-
         return .{
             .original = current,
             .width = if (ws.col > 0) ws.col else 80,
@@ -118,7 +112,6 @@ pub const Terminal = struct {
         raw.lflag.ICANON = false;
         raw.lflag.ECHO = false;
         raw.lflag.ISIG = false;
-        // NON-BLOCKING: VMIN=0, VTIME=0 means read returns immediately
         raw.cc[@intFromEnum(posix.V.MIN)] = 0;
         raw.cc[@intFromEnum(posix.V.TIME)] = 0;
         try posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, raw);
@@ -129,7 +122,6 @@ pub const Terminal = struct {
     }
 };
 
-/// Non-blocking key read - returns null if no key available
 pub fn readKey() ?u8 {
     var buf: [1]u8 = undefined;
     const n = posix.read(posix.STDIN_FILENO, &buf) catch return null;
@@ -138,18 +130,17 @@ pub fn readKey() ?u8 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// RANDOM NUMBER GENERATOR
+// RNG
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub const Rng = struct {
     state: u64,
 
     pub fn init(seed: u64) Rng {
-        return .{ .state = seed | 1 }; // Ensure non-zero
+        return .{ .state = seed | 1 };
     }
 
     pub fn next(self: *Rng) u64 {
-        // xorshift64*
         var x = self.state;
         x ^= x >> 12;
         x ^= x << 25;
