@@ -97,6 +97,14 @@ pub fn main() !void {
     var last_render: i64 = 0;
 
     while (true) {
+        const prev_w = term.width;
+        const prev_h = term.height;
+        term.updateSize();
+        if (term.width != prev_w or term.height != prev_h) {
+            dirty = true;
+            needs_full_clear = true;
+        }
+
         const now = std.time.milliTimestamp();
 
         // Input
@@ -165,7 +173,21 @@ pub fn main() !void {
             buf.flush();
         }
 
-        std.Thread.sleep(2_000_000); // 2ms
+        const poll_wait_ms: i64 = blk: {
+            if (dirty) break :blk 0;
+            if (test_state.state == .typing) {
+                const elapsed = now - last_render;
+                break :blk @max(0, timer_refresh_ms - elapsed);
+            }
+            break :blk 250;
+        };
+
+        var fds = [_]posix.pollfd{.{
+            .fd = posix.STDIN_FILENO,
+            .events = posix.POLL.IN,
+            .revents = 0,
+        }};
+        _ = posix.poll(&fds, @intCast(poll_wait_ms)) catch {};
     }
 }
 
