@@ -440,37 +440,20 @@ async function main() {
     const app = new OneApp();
     await app.init();
 
-    // Parse URL parameters for initial config
-    const params = new URLSearchParams(window.location.search);
+    // URL params
+    const params = new URLSearchParams(location.search);
+    if (params.has("mode")) app.setMode(params.get("mode"));
+    if (params.has("words")) app.setWordCount(+params.get("words"));
+    if (params.has("time")) app.setTimeLimit(+params.get("time"));
+    if (params.has("lang")) app.setLang(params.get("lang"));
+    if (params.has("theme")) app.setTheme(params.get("theme"));
 
-    if (params.has("mode")) {
-      app.setMode(params.get("mode"));
-    }
-    if (params.has("words")) {
-      app.setWordCount(parseInt(params.get("words"), 10));
-    }
-    if (params.has("time")) {
-      app.setTimeLimit(parseInt(params.get("time"), 10));
-    }
-    if (params.has("lang")) {
-      app.setLang(params.get("lang"));
-    }
-    if (params.has("theme")) {
-      app.setTheme(params.get("theme"));
-    }
-
-    // Expose app for debugging and external control
     window.oneApp = app;
-
-    console.log("ONE Web initialized. Access via window.oneApp");
-    console.log('Example: oneApp.setMode("vim"), oneApp.setTheme("dracula")');
-  } catch (error) {
-    console.error("Failed to initialize ONE:", error);
-    document.getElementById("loading").innerHTML = `
-      <span style="color: #ef4444; font-family: monospace;">
-        Failed to load. Check console for details.
-      </span>
-    `;
+    console.log("ONE Web ready. Use window.oneApp for API access.");
+  } catch (err) {
+    console.error("Failed to init:", err);
+    document.getElementById("loading").innerHTML =
+      '<span style="color:#ef4444;font-family:monospace">Failed to load</span>';
   }
 }
 
