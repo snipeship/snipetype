@@ -155,7 +155,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         buf.write(RESET);
     }
 
-    // Stats line
     buf.moveTo(0, 3);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, 3);
@@ -191,7 +190,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         },
     }
 
-    // Calculate max width for centering
     var max_line_len: usize = 0;
     for (target_lines) |line| {
         if (line.len > max_line_len) max_line_len = line.len;
@@ -205,7 +203,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
     const display_width = @min(max_line_len + 4, max_w);
     const start_x = (term.width -| display_width) / 2;
 
-    // Render lines
     const max_display_lines = @min(total_lines, term.height -| 10);
 
     for (0..max_display_lines) |row| {
@@ -213,7 +210,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         buf.moveTo(0, y);
         buf.write(CLEAR_LINE);
 
-        // Line number gutter
         buf.moveTo(start_x -| 4, y);
         buf.write(C_DIMMER);
         buf.print("{d:>3} ", .{row + 1});
@@ -224,7 +220,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         const target_line = if (row < target_lines.len) target_lines[row] else "";
         const typed_line = vim.buffer.getLine(row);
 
-        // Render character by character
         const line_len = @max(target_line.len, typed_line.len);
         for (0..line_len) |col| {
             const target_char: ?u8 = if (col < target_line.len) target_line[col] else null;
@@ -232,7 +227,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
             const is_cursor = vim.cursor.row == row and vim.cursor.col == col;
             const in_visual = vim.isInVisualRange(row, col);
 
-            // Determine styling
             if (is_cursor) {
                 if (vim.mode == .insert) {
                     buf.write(C_BG_GREEN ++ C_WHITE);
@@ -255,7 +249,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
                 buf.write(C_DIM);
             }
 
-            // Write character
             if (typed_char) |tc| {
                 buf.writeByte(tc);
             } else if (target_char) |tgt| {
@@ -266,7 +259,6 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
             buf.write(RESET);
         }
 
-        // Cursor at end of line
         if (vim.cursor.row == row and vim.cursor.col >= line_len) {
             if (vim.mode == .insert) {
                 buf.write(C_BG_GREEN ++ " " ++ RESET);
