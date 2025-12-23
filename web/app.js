@@ -369,58 +369,24 @@ class OneApp {
     const { bg, fg } = resolveThemeColors(themeId);
     document.documentElement.style.setProperty("--one-bg", bg);
     document.documentElement.style.setProperty("--one-fg", fg);
-
-    if (this.term?.renderer?.setTheme && this.term?.renderer?.resize) {
-      this.term.renderer.setTheme({
-        ...TERMINAL_THEME_BASE,
-        background: bg,
-        foreground: fg,
-      });
-      this.term.renderer.resize(this.term.cols, this.term.rows);
-    }
   }
 
-  /**
-   * Stop the animation loop
-   */
-  stopLoop() {
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
-  }
-
-  /**
-   * Public API: Set typing mode
-   * @param {string} mode - 'words' | 'sentences' | 'code' | 'vim'
-   */
+  // Public API
   setMode(mode) {
-    const modeMap = { words: 0, sentences: 1, code: 2, vim: 3 };
-    this.wasm.one_web_set_mode(modeMap[mode] ?? 0);
+    const map = { words: 0, sentences: 1, code: 2, vim: 3 };
+    this.wasm.one_web_set_mode(map[mode] ?? 0);
   }
 
-  /**
-   * Public API: Set word count
-   * @param {number} count - Number of words (1-100)
-   */
   setWordCount(count) {
     this.wasm.one_web_set_word_count(count);
   }
 
-  /**
-   * Public API: Set time limit
-   * @param {number} seconds - Time limit in seconds (0 = no limit)
-   */
   setTimeLimit(seconds) {
     this.wasm.one_web_set_time_limit(seconds);
   }
 
-  /**
-   * Public API: Set programming language
-   * @param {string} lang - 'mixed' | 'zig' | 'rust' | 'go' | 'typescript' | 'python' | 'c'
-   */
   setLang(lang) {
-    const langMap = {
+    const map = {
       mixed: 0,
       zig: 1,
       rust: 2,
@@ -429,15 +395,11 @@ class OneApp {
       python: 5,
       c: 6,
     };
-    this.wasm.one_web_set_lang(langMap[lang] ?? 0);
+    this.wasm.one_web_set_lang(map[lang] ?? 0);
   }
 
-  /**
-   * Public API: Set theme
-   * @param {string} theme - 'system' | 'one_dark' | 'one_light' | 'dracula' | 'nord' | 'gruvbox_dark' | 'solarized_dark'
-   */
   setTheme(theme) {
-    const themeMap = {
+    const map = {
       system: 0,
       one_dark: 1,
       one_light: 2,
@@ -446,42 +408,31 @@ class OneApp {
       gruvbox_dark: 5,
       solarized_dark: 6,
     };
-    this.wasm.one_web_set_theme(themeMap[theme] ?? 0);
+    this.wasm.one_web_set_theme(map[theme] ?? 0);
     this.syncWebTheme(true);
   }
 
-  /**
-   * Public API: Reset the current test
-   */
   reset() {
     this.wasm.one_web_reset();
   }
 
-  /**
-   * Public API: Get current state
-   * @returns {{ state: string, wpm: number, accuracy: number }}
-   */
   getStats() {
-    const stateMap = ["waiting", "typing", "finished"];
+    const states = ["waiting", "typing", "finished"];
     return {
-      state: stateMap[this.wasm.one_web_get_state()] ?? "waiting",
+      state: states[this.wasm.one_web_get_state()] ?? "waiting",
       wpm: this.wasm.one_web_get_wpm(),
       accuracy: this.wasm.one_web_get_accuracy(),
     };
   }
 
-  /**
-   * Clean up resources
-   */
   destroy() {
-    this.stopLoop();
+    if (this.animationId) cancelAnimationFrame(this.animationId);
     this.wasm.one_web_deinit();
-    this.term.dispose();
   }
 }
 
 // ============================================================================
-// Application Entry Point
+// Entry Point
 // ============================================================================
 
 async function main() {
