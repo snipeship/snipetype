@@ -16,6 +16,9 @@ const typing_test = @import("core/typing_test.zig");
 const render_buffer = @import("platform/render_buffer.zig");
 const terminal = @import("platform/terminal.zig");
 const input = @import("platform/input.zig");
+const renderer = @import("platform/renderer.zig");
+const ansi_renderer = @import("platform/ansi_renderer.zig");
+const cell_renderer = @import("platform/cell_renderer.zig");
 
 // UI modules
 pub const ansi = @import("ui/ansi.zig");
@@ -38,6 +41,11 @@ pub const RenderBuffer = render_buffer.RenderBuffer;
 pub const Terminal = terminal.Terminal;
 pub const Key = input.Key;
 pub const Input = input.Input;
+pub const Renderer = renderer.Renderer;
+pub const Cell = renderer.Cell;
+pub const CellFlags = renderer.CellFlags;
+pub const AnsiRenderer = ansi_renderer.AnsiRenderer;
+pub const CellRenderer = cell_renderer.CellRenderer;
 
 pub const Cursor = vim_cursor.Cursor;
 pub const VimMode = vim_mode.VimMode;
