@@ -165,17 +165,30 @@ pub const Buffer = struct {
         self.lines.insert(self.allocator, insert_row, new_line) catch {};
     }
 
-    pub fn deleteRange(self: *Buffer, start: Cursor, end: Cursor) []u8 {
+    pub fn copyRange(self: *const Buffer, start: Cursor, end: Cursor) ![]u8 {
         // For simplicity, only handle single-line range for now
-        if (start.row != end.row) return &[_]u8{};
-        if (start.row >= self.lines.items.len) return &[_]u8{};
+        if (start.row != end.row) return try self.allocator.alloc(u8, 0);
+        if (start.row >= self.lines.items.len) return try self.allocator.alloc(u8, 0);
+
+        const line = self.getLine(start.row);
+        const from = @min(start.col, line.len);
+        const to = @min(end.col, line.len);
+        if (from >= to) return try self.allocator.alloc(u8, 0);
+
+        return try self.allocator.dupe(u8, line[from..to]);
+    }
+
+    pub fn deleteRange(self: *Buffer, start: Cursor, end: Cursor) ![]u8 {
+        // For simplicity, only handle single-line range for now
+        if (start.row != end.row) return try self.allocator.alloc(u8, 0);
+        if (start.row >= self.lines.items.len) return try self.allocator.alloc(u8, 0);
 
         const line = self.getLineMut(start.row);
         const from = @min(start.col, line.items.len);
         const to = @min(end.col, line.items.len);
-        if (from >= to) return &[_]u8{};
+        if (from >= to) return try self.allocator.alloc(u8, 0);
 
-        const content = self.allocator.dupe(u8, line.items[from..to]) catch return &[_]u8{};
+        const content = try self.allocator.dupe(u8, line.items[from..to]);
         // Remove chars from 'to' down to 'from'
         var i: usize = to;
         while (i > from) {
@@ -185,22 +198,22 @@ pub const Buffer = struct {
         return content;
     }
 
-    pub fn deleteToEndOfLine(self: *Buffer, cursor: Cursor) []u8 {
-        if (cursor.row >= self.lines.items.len) return &[_]u8{};
+    pub fn deleteToEndOfLine(self: *Buffer, cursor: Cursor) ![]u8 {
+        if (cursor.row >= self.lines.items.len) return try self.allocator.alloc(u8, 0);
         const line = self.getLineMut(cursor.row);
         const col = @min(cursor.col, line.items.len);
-        const content = self.allocator.dupe(u8, line.items[col..]) catch return &[_]u8{};
+        const content = try self.allocator.dupe(u8, line.items[col..]);
         line.shrinkRetainingCapacity(col);
         return content;
     }
 
-    pub fn toText(self: *const Buffer, allocator: std.mem.Allocator) []u8 {
+    pub fn toText(self: *const Buffer, allocator: std.mem.Allocator) ![]u8 {
         var total: usize = 0;
         for (self.lines.items, 0..) |line, i| {
             total += line.items.len;
             if (i < self.lines.items.len - 1) total += 1; // newline
         }
-        const buf = allocator.alloc(u8, total) catch return &[_]u8{};
+        const buf = try allocator.alloc(u8, total);
         var pos: usize = 0;
         for (self.lines.items, 0..) |line, i| {
             @memcpy(buf[pos..][0..line.items.len], line.items);
