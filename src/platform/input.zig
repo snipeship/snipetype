@@ -1,5 +1,13 @@
+//! Input handling for keyboard events.
+//! Platform-specific byte source is selected at compile time.
+//! - Native: reads from stdin
+//! - WASM: JavaScript pushes bytes into a ring buffer
+
 const std = @import("std");
-const posix = std.posix;
+const builtin = @import("builtin");
+const constants = @import("../core/constants.zig");
+
+const is_wasm = builtin.cpu.arch == .wasm32;
 
 pub const Key = union(enum) {
     Byte: u8,
@@ -9,15 +17,41 @@ pub const Key = union(enum) {
     ArrowRight,
 };
 
-pub const Input = struct {
-    queued: [8]u8 = undefined,
+pub const Input = if (is_wasm) WasmInput else NativeInput;
+
+/// WASM Input - reads from ring buffer fed by JavaScript
+const WasmInput = struct {
+    // Escape sequence queue for unread bytes
+    queued: [constants.INPUT_QUEUE_SIZE]u8 = undefined,
     queued_len: usize = 0,
 
-    pub fn init() Input {
+    // Ring buffer for incoming bytes from JavaScript
+    ring: [constants.WEB_RING_BUFFER_SIZE]u8 = undefined,
+    head: usize = 0,
+    tail: usize = 0,
+
+    pub fn init() WasmInput {
         return .{};
     }
 
-    pub fn readKey(self: *Input) ?Key {
+    /// Push a single byte into the ring buffer
+    pub fn pushByte(self: *WasmInput, b: u8) void {
+        const next_tail = (self.tail + 1) % constants.WEB_RING_BUFFER_SIZE;
+        if (next_tail == self.head) {
+            // Ring full: drop oldest byte
+            self.head = (self.head + 1) % constants.WEB_RING_BUFFER_SIZE;
+        }
+        self.ring[self.tail] = b;
+        self.tail = next_tail;
+    }
+
+    /// Push multiple bytes into the ring buffer
+    pub fn pushBytes(self: *WasmInput, bytes: []const u8) void {
+        for (bytes) |b| self.pushByte(b);
+    }
+
+    /// Read and parse the next key (handles escape sequences)
+    pub fn readKey(self: *WasmInput) ?Key {
         const first = self.readByte() orelse return null;
         if (first != 0x1b) return .{ .Byte = first };
 
@@ -45,7 +79,8 @@ pub const Input = struct {
         };
     }
 
-    fn readByte(self: *Input) ?u8 {
+    fn readByte(self: *WasmInput) ?u8 {
+        // First check unread buffer
         if (self.queued_len > 0) {
             const b = self.queued[0];
             const remaining = self.queued_len - 1;
@@ -56,20 +91,99 @@ pub const Input = struct {
             return b;
         }
 
+        // Read from ring buffer
+        if (self.head == self.tail) return null; // Empty
+        const b = self.ring[self.head];
+        self.head = (self.head + 1) % constants.WEB_RING_BUFFER_SIZE;
+        return b;
+    }
+
+    fn unreadByte(self: *WasmInput, b: u8) void {
+        if (self.queued_len >= self.queued.len) return;
+        if (self.queued_len > 0) {
+            @memcpy(self.queued[1 .. self.queued_len + 1], self.queued[0..self.queued_len]);
+        }
+        self.queued[0] = b;
+        self.queued_len += 1;
+    }
+};
+
+/// Native Input - reads from stdin
+const NativeInput = struct {
+    const posix = std.posix;
+
+    // Escape sequence queue for unread bytes
+    queued: [constants.INPUT_QUEUE_SIZE]u8 = undefined,
+    queued_len: usize = 0,
+
+    pub fn init() NativeInput {
+        return .{};
+    }
+
+    /// No-op for native (only used by web)
+    pub fn pushByte(self: *NativeInput, b: u8) void {
+        _ = self;
+        _ = b;
+    }
+
+    /// No-op for native (only used by web)
+    pub fn pushBytes(self: *NativeInput, bytes: []const u8) void {
+        _ = self;
+        _ = bytes;
+    }
+
+    /// Read and parse the next key (handles escape sequences)
+    pub fn readKey(self: *NativeInput) ?Key {
+        const first = self.readByte() orelse return null;
+        if (first != 0x1b) return .{ .Byte = first };
+
+        const second = self.readByte() orelse return .{ .Byte = first };
+        if (second != '[') {
+            self.unreadByte(second);
+            return .{ .Byte = first };
+        }
+
+        const third = self.readByte() orelse {
+            self.unreadByte(second);
+            return .{ .Byte = first };
+        };
+
+        return switch (third) {
+            'A' => .ArrowUp,
+            'B' => .ArrowDown,
+            'C' => .ArrowRight,
+            'D' => .ArrowLeft,
+            else => blk: {
+                self.unreadByte(third);
+                self.unreadByte(second);
+                break :blk .{ .Byte = first };
+            },
+        };
+    }
+
+    fn readByte(self: *NativeInput) ?u8 {
+        // First check unread buffer
+        if (self.queued_len > 0) {
+            const b = self.queued[0];
+            const remaining = self.queued_len - 1;
+            if (remaining > 0) {
+                @memcpy(self.queued[0..remaining], self.queued[1..self.queued_len]);
+            }
+            self.queued_len = remaining;
+            return b;
+        }
+
+        // Read from stdin
         var buf: [1]u8 = undefined;
         const n = posix.read(posix.STDIN_FILENO, &buf) catch return null;
         if (n == 0) return null;
         return buf[0];
     }
 
-    fn unreadByte(self: *Input, b: u8) void {
+    fn unreadByte(self: *NativeInput, b: u8) void {
         if (self.queued_len >= self.queued.len) return;
-
         if (self.queued_len > 0) {
-            @memcpy(
-                self.queued[1 .. self.queued_len + 1],
-                self.queued[0..self.queued_len],
-            );
+            @memcpy(self.queued[1 .. self.queued_len + 1], self.queued[0..self.queued_len]);
         }
         self.queued[0] = b;
         self.queued_len += 1;
