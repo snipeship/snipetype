@@ -1,11 +1,14 @@
+//! Typing test state machine and stats.
+
 const std = @import("std");
 
 const content = @import("content.zig");
+const metrics = @import("metrics.zig");
 const types = @import("types.zig");
 const Config = types.Config;
 
 const Rng = @import("rng.zig").Rng;
-const VimEditor = @import("vim.zig").VimEditor;
+const VimEditor = @import("../vim/editor.zig").VimEditor;
 
 pub const TestState = enum { waiting, typing, finished };
 
@@ -30,21 +33,27 @@ pub const TypingTest = struct {
     allocator: std.mem.Allocator,
     config: Config,
 
+    fn rebuildTargetLines(lines: *std.ArrayList([]const u8), allocator: std.mem.Allocator, target: []const u8) void {
+        lines.clearRetainingCapacity();
+
+        var start: usize = 0;
+        for (target, 0..) |c, i| {
+            if (c == '\n') {
+                lines.append(allocator, target[start..i]) catch {};
+                start = i + 1;
+            }
+        }
+        if (start <= target.len) {
+            lines.append(allocator, target[start..]) catch {};
+        }
+    }
+
     pub fn init(allocator: std.mem.Allocator, seed: u64, config: Config) !TypingTest {
         var rng = Rng.init(seed);
         const target = try content.generateTarget(&rng, allocator, config);
 
         var target_lines = std.ArrayList([]const u8){};
-        var start: usize = 0;
-        for (target, 0..) |c, i| {
-            if (c == '\n') {
-                target_lines.append(allocator, target[start..i]) catch {};
-                start = i + 1;
-            }
-        }
-        if (start <= target.len) {
-            target_lines.append(allocator, target[start..]) catch {};
-        }
+        rebuildTargetLines(&target_lines, allocator, target);
 
         return .{
             .target_lines = target_lines,
@@ -71,22 +80,12 @@ pub const TypingTest = struct {
 
     pub fn reset(self: *TypingTest, seed: u64) !void {
         self.allocator.free(self.target_text);
-        self.target_lines.clearRetainingCapacity();
 
         var rng = Rng.init(seed);
         const target = try content.generateTarget(&rng, self.allocator, self.config);
         self.target_text = target;
 
-        var start: usize = 0;
-        for (target, 0..) |c, i| {
-            if (c == '\n') {
-                self.target_lines.append(self.allocator, target[start..i]) catch {};
-                start = i + 1;
-            }
-        }
-        if (start <= target.len) {
-            self.target_lines.append(self.allocator, target[start..]) catch {};
-        }
+        rebuildTargetLines(&self.target_lines, self.allocator, target);
 
         self.typed.clearRetainingCapacity();
         self.cursor_pos = 0;
@@ -158,42 +157,26 @@ pub const TypingTest = struct {
     }
 
     fn calculateStats(self: *TypingTest) void {
-        self.correct_chars = 0;
-        self.errors = 0;
-
         const typed = if (self.config.mode == .vim)
             self.vim.buffer.toText(self.allocator) catch return
         else
             self.allocator.dupe(u8, self.typed.items) catch return;
         defer self.allocator.free(typed);
 
-        const len = @min(typed.len, self.target_text.len);
-        for (0..len) |i| {
-            if (typed[i] == self.target_text[i]) {
-                self.correct_chars += 1;
-            } else {
-                self.errors += 1;
-            }
-        }
-        if (typed.len > self.target_text.len) {
-            self.errors += typed.len - self.target_text.len;
-        } else if (typed.len < self.target_text.len) {
-            self.errors += self.target_text.len - typed.len;
-        }
+        const stats = metrics.compareTypedToTarget(typed, self.target_text);
+        self.correct_chars = stats.correct_chars;
+        self.errors = stats.errors;
     }
 
     pub fn getWPM(self: *const TypingTest) f64 {
         const start = self.start_time orelse return 0;
         const end = self.end_time orelse return 0;
         const ms = end - start;
-        if (ms <= 0) return 0;
-        return @as(f64, @floatFromInt(self.correct_chars)) / 5.0 / (@as(f64, @floatFromInt(ms)) / 60000.0);
+        return metrics.wpm(self.correct_chars, ms);
     }
 
     pub fn getAccuracy(self: *const TypingTest) f64 {
-        const total = self.correct_chars + self.errors;
-        if (total == 0) return 100.0;
-        return @as(f64, @floatFromInt(self.correct_chars)) / @as(f64, @floatFromInt(total)) * 100.0;
+        return metrics.accuracy(self.correct_chars, self.errors);
     }
 
     pub fn getElapsedSeconds(self: *const TypingTest) f64 {
@@ -220,11 +203,7 @@ pub const TypingTest = struct {
             self.allocator.dupe(u8, self.typed.items) catch return 0;
         defer self.allocator.free(typed);
 
-        var correct: usize = 0;
-        const len = @min(typed.len, self.target_text.len);
-        for (0..len) |i| {
-            if (typed[i] == self.target_text[i]) correct += 1;
-        }
-        return @as(f64, @floatFromInt(correct)) / 5.0 / (@as(f64, @floatFromInt(ms)) / 60000.0);
+        const stats = metrics.compareTypedToTarget(typed, self.target_text);
+        return metrics.wpm(stats.correct_chars, ms);
     }
 };
