@@ -120,11 +120,16 @@ pub fn main() !void {
                     }
                 },
                 '\t' => {
-                    seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-                    try test_state.reset(seed);
-                    dirty = true;
-                    needs_full_clear = true;
-                    last_state = test_state.state;
+                    if (test_state.config.mode == .vim and test_state.vim.mode == .insert and test_state.state != .finished) {
+                        test_state.handleKey('\t');
+                        dirty = true;
+                    } else {
+                        seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+                        try test_state.reset(seed);
+                        dirty = true;
+                        needs_full_clear = true;
+                        last_state = test_state.state;
+                    }
                 },
                 else => {
                     test_state.handleKey(key);
@@ -520,11 +525,16 @@ fn renderFooter(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest)
 
     // Help line
     buf.moveTo(cx -| 18, term.height);
-    buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " new  " ++ RESET);
-
     if (t.config.mode == .vim) {
+        if (t.vim.mode == .insert and t.state != .finished) {
+            buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " indent  " ++ RESET);
+        } else {
+            buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " new  " ++ RESET);
+        }
         buf.write(C_DIM ++ "esc" ++ RESET ++ C_DIMMER ++ " normal  " ++ RESET);
         buf.write(C_DIM ++ "v/V" ++ RESET ++ C_DIMMER ++ " visual  " ++ RESET);
+    } else {
+        buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " new  " ++ RESET);
     }
     buf.write(C_DIM ++ "ctrl+c" ++ RESET ++ C_DIMMER ++ " quit" ++ RESET);
 }
