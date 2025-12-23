@@ -295,6 +295,8 @@ fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) vo
     buf.write(BOLD ++ C_INDIGO ++ "ONE" ++ RESET);
 
     // Mode line with vim mode indicator
+    buf.moveTo(0, 2);
+    buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, 2);
     buf.write(C_DIM ++ "vim" ++ RESET);
     buf.write(" · ");
@@ -315,6 +317,8 @@ fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) vo
     }
 
     // Stats line
+    buf.moveTo(0, 3);
+    buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, 3);
     switch (t.state) {
         .waiting => {
