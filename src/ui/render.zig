@@ -185,11 +185,7 @@ pub fn renderVim(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *co
         }
     }
 
-    buf.moveTo(cx -| 1, 1);
-    buf.write(BOLD);
-    buf.write(theme.accent);
-    buf.write("ONE");
-    buf.write(base);
+    renderHeader(buf, cx, theme);
 
     buf.moveTo(0, 2);
     buf.write(CLEAR_LINE);
@@ -244,33 +240,8 @@ pub fn renderVim(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *co
             buf.write(base);
         },
         .typing => {
-            if (t.config.time_limit > 0) {
-                const rem = t.getRemainingSeconds();
-                if (rem <= 5) {
-                    buf.write(theme.danger);
-                    buf.write(BOLD);
-                } else if (rem <= 10) {
-                    buf.write(theme.extra);
-                } else {
-                    buf.write(theme.dim);
-                }
-                buf.print("{d:.1}s", .{rem});
-            } else {
-                buf.write(theme.dim);
-                buf.print("{d:.1}s", .{t.getElapsedSeconds()});
-            }
-            buf.write(base);
-
-            const wpm = t.getLiveWPM();
-            if (wpm > 0) {
-                buf.write("  ");
-                buf.write(theme.accent);
-                buf.print("{d:.0}", .{wpm});
-                buf.write(base);
-                buf.write(theme.dimmer);
-                buf.write(" wpm");
-                buf.write(base);
-            }
+            renderTimer(buf, t, theme);
+            renderWPM(buf, t, theme);
 
             // Cursor position
             buf.write("  ");
@@ -431,11 +402,7 @@ fn renderFooter(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *con
     const cx = term.width / 2;
     const base = theme.base;
 
-    buf.moveTo(cx -| 20, term.height -| 2);
-    buf.write(theme.dimmer);
-    var i: usize = 0;
-    while (i < 40) : (i += 1) buf.write("─");
-    buf.write(base);
+    renderDivider(buf, cx, term.height -| 2, theme);
 
     buf.moveTo(cx -| 18, term.height);
     if (t.config.mode == .vim) {
