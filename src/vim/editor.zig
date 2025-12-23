@@ -210,6 +210,7 @@ pub const VimEditor = struct {
 
             // Single-key actions
             'x' => {
+                self.saveUndoState();
                 for (0..count) |_| {
                     if (self.cursor.col < self.buffer.lineLen(self.cursor.row)) {
                         self.buffer.deleteChar(self.cursor);
@@ -218,6 +219,7 @@ pub const VimEditor = struct {
                 motions.clampCursor(&self.buffer, &self.cursor, self.mode);
             },
             'X' => {
+                self.saveUndoState();
                 for (0..count) |_| {
                     if (self.cursor.col > 0) {
                         self.cursor.col -= 1;
@@ -226,6 +228,7 @@ pub const VimEditor = struct {
                 }
             },
             'D' => {
+                self.saveUndoState();
                 const content = self.buffer.deleteToEndOfLine(self.cursor) catch {
                     self.status_msg = "out of memory";
                     return;
@@ -238,6 +241,7 @@ pub const VimEditor = struct {
                 motions.clampCursor(&self.buffer, &self.cursor, self.mode);
             },
             'C' => {
+                self.saveUndoState();
                 const content = self.buffer.deleteToEndOfLine(self.cursor) catch {
                     self.status_msg = "out of memory";
                     return;
