@@ -203,6 +203,7 @@ pub const App = struct {
         self.dirty = false;
 
         const palette = theme_mod.resolve(self.theme_id);
+        r.setUseTerminalDefaults(palette.use_terminal_defaults);
         r.setDefaultColors(palette.fg, palette.bg);
         r.resetStyle();
 
