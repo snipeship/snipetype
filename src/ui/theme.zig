@@ -60,7 +60,7 @@ pub fn options() []const ThemeOption {
 
 pub fn resolve(id: ThemeId) *const Theme {
     return switch (id) {
-        .system => if (systemPrefersLight()) &THEMES.one_light else &THEMES.one_dark,
+        .system => if (systemPrefersLight()) &THEMES.system_light else &THEMES.system_dark,
         .one_dark => &THEMES.one_dark,
         .one_light => &THEMES.one_light,
         .dracula => &THEMES.dracula,
