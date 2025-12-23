@@ -375,11 +375,19 @@ pub const VimEditor = struct {
     }
 
     fn opLineRange(self: *VimEditor, op: Operator, from_row: usize, to_row: usize) void {
+        // Save undo state before delete/change operations
+        if (op == .delete or op == .change) {
+            self.saveUndoState();
+        }
         var ctx = self.makeOpContext();
         operators.opLineRange(&ctx, op, from_row, to_row);
     }
 
     fn opCharRange(self: *VimEditor, op: Operator, start: Cursor, end: Cursor) void {
+        // Save undo state before delete/change operations
+        if (op == .delete or op == .change) {
+            self.saveUndoState();
+        }
         var ctx = self.makeOpContext();
         operators.opCharRange(&ctx, op, start, end);
     }
@@ -444,10 +452,12 @@ pub const VimEditor = struct {
                 self.cursor.col = 0;
             },
             'd', 'x' => {
+                self.saveUndoState();
                 self.deleteVisualSelection();
                 self.mode = .normal;
             },
             'c' => {
+                self.saveUndoState();
                 self.deleteVisualSelection();
                 self.mode = .insert;
             },
