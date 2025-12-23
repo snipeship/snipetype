@@ -13,6 +13,9 @@ pub const HELP =
     \\  -l, --lang <LANG>   zig | rust | go | ts | python | c | mixed
     \\  -h, --help          Show help
     \\
+    \\IN-APP:
+    \\  ctrl+p              Settings (theme/mode)
+    \\
     \\VIM MODE KEYS:
     \\  Motion:     h j k l w b e 0 $ ^ gg G
     \\  Insert:     i I a A o O s S
