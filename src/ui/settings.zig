@@ -1,9 +1,5 @@
-const ansi = @import("ansi.zig");
 const theme_mod = @import("theme.zig");
-
-// Import platform types from consolidated modules
-const RenderBuffer = @import("../platform/render_buffer.zig").RenderBuffer;
-const Terminal = @import("../platform/terminal.zig").Terminal;
+const Renderer = @import("../platform/renderer.zig").Renderer;
 const Key = @import("../platform/input.zig").Key;
 const Mode = @import("../core/types.zig").Mode;
 
@@ -114,8 +110,7 @@ pub const Settings = struct {
 
     pub fn renderOverlay(
         self: *const Settings,
-        buf: *RenderBuffer,
-        term: *Terminal,
+        r: Renderer,
         palette: *const theme_mod.Theme,
         theme_id: theme_mod.ThemeId,
         current_mode: Mode,
@@ -124,19 +119,18 @@ pub const Settings = struct {
 
         const theme_opts = theme_mod.options();
         const list_len: usize = @max(theme_opts.len, MODE_OPTIONS.len);
-        const base = palette.base;
 
-        const max_w: usize = term.width -| 2;
-        const max_h: usize = term.height -| 2;
+        const max_w: usize = r.width() -| 2;
+        const max_h: usize = r.height() -| 2;
         if (max_w < 20 or max_h < 10) return;
 
         const w: usize = @min(max_w, 72);
         const list_h: usize = @max(1, @min(list_len, max_h -| 8));
         const h: usize = list_h + 8;
-        const x0: usize = (term.width -| w) / 2;
-        const y0: usize = (term.height -| h) / 2;
+        const x0: usize = (r.width() -| w) / 2;
+        const y0: usize = (r.height() -| h) / 2;
 
-        drawBox(buf, x0, y0, w, h, palette);
+        drawBox(r, x0, y0, w, h, palette);
 
         const inner_x = x0 + 1;
         const inner_w = w - 2;
@@ -146,43 +140,43 @@ pub const Settings = struct {
 
         const title = "Settings";
         const title_x = x0 + (w - title.len) / 2;
-        buf.moveTo(title_x, y0 + 1);
-        buf.write(ansi.BOLD);
-        buf.write(palette.accent);
-        buf.write(title);
-        buf.write(base);
+        r.moveTo(title_x, y0 + 1);
+        r.setBold(true);
+        r.setFg(palette.accent);
+        r.write(title);
+        r.resetStyle();
 
-        drawInnerDivider(buf, x0, y0 + 2, w, palette, null);
-        drawInnerDivider(buf, x0, y0 + 4 + list_h, w, palette, divider_x);
+        drawInnerDivider(r, x0, y0 + 2, w, palette, null);
+        drawInnerDivider(r, x0, y0 + 4 + list_h, w, palette, divider_x);
 
         // Column headings
-        buf.moveTo(x0 + 2, y0 + 3);
+        r.moveTo(x0 + 2, y0 + 3);
         if (self.panel == .theme) {
-            buf.write(ansi.BOLD);
-            buf.write(palette.accent);
+            r.setBold(true);
+            r.setFg(palette.accent);
         } else {
-            buf.write(palette.dim);
+            r.setFg(palette.dim);
         }
-        buf.write("Theme");
-        buf.write(base);
+        r.write("Theme");
+        r.resetStyle();
 
-        buf.moveTo(divider_x + 2, y0 + 3);
+        r.moveTo(divider_x + 2, y0 + 3);
         if (self.panel == .mode) {
-            buf.write(ansi.BOLD);
-            buf.write(palette.accent);
+            r.setBold(true);
+            r.setFg(palette.accent);
         } else {
-            buf.write(palette.dim);
+            r.setFg(palette.dim);
         }
-        buf.write("Mode");
-        buf.write(base);
+        r.write("Mode");
+        r.resetStyle();
 
         // Vertical divider in list area
-        buf.write(palette.border);
+        r.setFg(palette.border);
         for (0..(list_h + 1)) |row| {
-            buf.moveTo(divider_x, y0 + 3 + row);
-            buf.write("│");
+            r.moveTo(divider_x, y0 + 3 + row);
+            r.write("|");
         }
-        buf.write(base);
+        r.resetStyle();
 
         const left_text_x: usize = inner_x + 1;
         const left_fill_w: usize = left_w - 1;
@@ -199,25 +193,25 @@ pub const Settings = struct {
                 const is_active = self.panel == .theme;
                 const is_current = opt.id == theme_id;
 
-                buf.moveTo(left_text_x, y);
+                r.moveTo(left_text_x, y);
                 if (is_selected and is_active) {
-                    buf.write(palette.cursor_bg);
-                    buf.write(palette.cursor_fg);
-                    buf.write(ansi.BOLD);
+                    r.setBg(palette.cursor_bg);
+                    r.setFg(palette.cursor_fg);
+                    r.setBold(true);
                 } else if (is_selected) {
-                    buf.write(palette.visual_bg);
-                    buf.write(palette.visual_fg);
+                    r.setBg(palette.visual_bg);
+                    r.setFg(palette.visual_fg);
                 } else if (is_current) {
-                    buf.write(palette.accent);
+                    r.setFg(palette.accent);
                 } else {
-                    buf.write(palette.dim);
+                    r.setFg(palette.dim);
                 }
 
-                buf.writeByte(if (is_current) '*' else ' ');
-                buf.write(" ");
-                buf.write(opt.label);
-                padSpaces(buf, left_fill_w, 2 + opt.label.len);
-                buf.write(base);
+                r.writeByte(if (is_current) '*' else ' ');
+                r.write(" ");
+                r.write(opt.label);
+                padSpaces(r, left_fill_w, 2 + opt.label.len);
+                r.resetStyle();
             }
 
             // Mode column
@@ -227,25 +221,25 @@ pub const Settings = struct {
                 const is_active = self.panel == .mode;
                 const is_current = opt.mode == current_mode;
 
-                buf.moveTo(right_text_x, y);
+                r.moveTo(right_text_x, y);
                 if (is_selected and is_active) {
-                    buf.write(palette.cursor_bg);
-                    buf.write(palette.cursor_fg);
-                    buf.write(ansi.BOLD);
+                    r.setBg(palette.cursor_bg);
+                    r.setFg(palette.cursor_fg);
+                    r.setBold(true);
                 } else if (is_selected) {
-                    buf.write(palette.visual_bg);
-                    buf.write(palette.visual_fg);
+                    r.setBg(palette.visual_bg);
+                    r.setFg(palette.visual_fg);
                 } else if (is_current) {
-                    buf.write(palette.accent);
+                    r.setFg(palette.accent);
                 } else {
-                    buf.write(palette.dim);
+                    r.setFg(palette.dim);
                 }
 
-                buf.writeByte(if (is_current) '*' else ' ');
-                buf.write(" ");
-                buf.write(opt.label);
-                padSpaces(buf, right_fill_w, 2 + opt.label.len);
-                buf.write(base);
+                r.writeByte(if (is_current) '*' else ' ');
+                r.write(" ");
+                r.write(opt.label);
+                padSpaces(r, right_fill_w, 2 + opt.label.len);
+                r.resetStyle();
             }
         }
 
@@ -253,42 +247,42 @@ pub const Settings = struct {
         const selected_theme = theme_opts[self.theme_index];
         const selected_mode = MODE_OPTIONS[self.mode_index].mode;
 
-        buf.moveTo(x0 + 2, y0 + 5 + list_h);
-        buf.write(palette.dimmer);
-        buf.write("Theme:");
-        buf.write(base);
-        buf.write(" ");
-        buf.write(palette.accent);
-        buf.write(selected_theme.label);
-        buf.write(base);
+        r.moveTo(x0 + 2, y0 + 5 + list_h);
+        r.setFg(palette.dimmer);
+        r.write("Theme:");
+        r.resetStyle();
+        r.write(" ");
+        r.setFg(palette.accent);
+        r.write(selected_theme.label);
+        r.resetStyle();
         if (selected_theme.id == .system) {
-            buf.write(palette.dimmer);
-            buf.write(" (");
-            buf.write(palette.dim);
-            buf.write(palette.name);
-            buf.write(palette.dimmer);
-            buf.write(")");
-            buf.write(base);
+            r.setFg(palette.dimmer);
+            r.write(" (");
+            r.setFg(palette.dim);
+            r.write(palette.name);
+            r.setFg(palette.dimmer);
+            r.write(")");
+            r.resetStyle();
         }
 
-        buf.write(palette.dimmer);
-        buf.write("  Mode:");
-        buf.write(base);
-        buf.write(" ");
-        buf.write(palette.accent);
-        buf.write(selected_mode.name());
-        buf.write(base);
+        r.setFg(palette.dimmer);
+        r.write("  Mode:");
+        r.resetStyle();
+        r.write(" ");
+        r.setFg(palette.accent);
+        r.write(selected_mode.name());
+        r.resetStyle();
         if (selected_mode != current_mode) {
-            buf.write(palette.extra);
-            buf.write(" (restart)");
-            buf.write(base);
+            r.setFg(palette.extra);
+            r.write(" (restart)");
+            r.resetStyle();
         }
 
         // Help line
-        buf.moveTo(x0 + 2, y0 + 6 + list_h);
-        buf.write(palette.dimmer);
-        buf.write("up/down select  tab switch  enter apply  esc cancel");
-        buf.write(base);
+        r.moveTo(x0 + 2, y0 + 6 + list_h);
+        r.setFg(palette.dimmer);
+        r.write("up/down select  tab switch  enter apply  esc cancel");
+        r.resetStyle();
     }
 };
 
@@ -316,51 +310,51 @@ fn moveIndex(index: usize, len: usize, delta: i8) usize {
     return @intCast(next);
 }
 
-fn padSpaces(buf: *RenderBuffer, width: usize, used: usize) void {
+fn padSpaces(r: Renderer, width: usize, used: usize) void {
     if (used >= width) return;
     const rem = width - used;
-    for (0..rem) |_| buf.write(" ");
+    for (0..rem) |_| r.write(" ");
 }
 
 fn drawInnerDivider(
-    buf: *RenderBuffer,
+    r: Renderer,
     x0: usize,
     y: usize,
     w: usize,
     palette: *const theme_mod.Theme,
     divider_x: ?usize,
 ) void {
-    buf.moveTo(x0 + 1, y);
-    buf.write(palette.border);
-    for (0..(w - 2)) |_| buf.write("─");
+    r.moveTo(x0 + 1, y);
+    r.setFg(palette.border);
+    for (0..(w - 2)) |_| r.write("-");
     if (divider_x) |dx| {
-        buf.moveTo(dx, y);
-        buf.write("┼");
+        r.moveTo(dx, y);
+        r.write("+");
     }
-    buf.write(palette.base);
+    r.resetStyle();
 }
 
-fn drawBox(buf: *RenderBuffer, x0: usize, y0: usize, w: usize, h: usize, palette: *const theme_mod.Theme) void {
+fn drawBox(r: Renderer, x0: usize, y0: usize, w: usize, h: usize, palette: *const theme_mod.Theme) void {
     if (w < 2 or h < 2) return;
 
-    buf.write(palette.border);
+    r.setFg(palette.border);
 
-    buf.moveTo(x0, y0);
-    buf.write("┌");
-    for (0..(w - 2)) |_| buf.write("─");
-    buf.write("┐");
+    r.moveTo(x0, y0);
+    r.write("+");
+    for (0..(w - 2)) |_| r.write("-");
+    r.write("+");
 
     for (1..(h - 1)) |dy| {
-        buf.moveTo(x0, y0 + dy);
-        buf.write("│");
-        for (0..(w - 2)) |_| buf.write(" ");
-        buf.write("│");
+        r.moveTo(x0, y0 + dy);
+        r.write("|");
+        for (0..(w - 2)) |_| r.write(" ");
+        r.write("|");
     }
 
-    buf.moveTo(x0, y0 + h - 1);
-    buf.write("└");
-    for (0..(w - 2)) |_| buf.write("─");
-    buf.write("┘");
+    r.moveTo(x0, y0 + h - 1);
+    r.write("+");
+    for (0..(w - 2)) |_| r.write("-");
+    r.write("+");
 
-    buf.write(palette.base);
+    r.resetStyle();
 }
