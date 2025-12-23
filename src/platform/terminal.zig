@@ -1,32 +1,74 @@
-//! Terminal raw mode + size helpers.
+//! Terminal raw mode and size helpers.
+//! Platform-specific behavior is selected at compile time.
+//! - Native: uses termios for raw mode, ioctl for size
+//! - WASM: size controlled by JavaScript, raw mode not applicable
 
 const std = @import("std");
-const posix = std.posix;
+const builtin = @import("builtin");
+const constants = @import("../core/constants.zig");
 
-pub const Terminal = struct {
-    original: posix.termios,
-    width: usize,
-    height: usize,
+const is_wasm = builtin.cpu.arch == .wasm32;
 
-    pub fn init() !Terminal {
-        const current = try posix.tcgetattr(posix.STDIN_FILENO);
-        var ws: posix.winsize = .{ .row = 24, .col = 80, .xpixel = 0, .ypixel = 0 };
-        _ = posix.system.ioctl(posix.STDOUT_FILENO, posix.T.IOCGWINSZ, @intFromPtr(&ws));
-        return .{
-            .original = current,
-            .width = if (ws.col > 0) ws.col else 80,
-            .height = if (ws.row > 0) ws.row else 24,
-        };
+pub const Terminal = if (is_wasm) WasmTerminal else NativeTerminal;
+
+/// WASM Terminal - minimal implementation
+const WasmTerminal = struct {
+    width: usize = constants.DEFAULT_TERM_WIDTH,
+    height: usize = constants.DEFAULT_TERM_HEIGHT,
+
+    pub fn init() !WasmTerminal {
+        return WasmTerminal{};
     }
 
-    pub fn updateSize(self: *Terminal) void {
+    pub fn updateSize(self: *WasmTerminal) void {
+        _ = self;
+        // Web: JS calls setSize() directly
+    }
+
+    pub fn setSize(self: *WasmTerminal, w: usize, h: usize) void {
+        self.width = w;
+        self.height = h;
+    }
+
+    pub fn enableRawMode(self: *WasmTerminal) !void {
+        _ = self;
+        // No-op in browser
+    }
+
+    pub fn restore(self: *WasmTerminal) void {
+        _ = self;
+        // No-op in browser
+    }
+};
+
+/// Native Terminal - full implementation with raw mode support
+const NativeTerminal = struct {
+    const posix = std.posix;
+
+    width: usize = constants.DEFAULT_TERM_WIDTH,
+    height: usize = constants.DEFAULT_TERM_HEIGHT,
+    original: posix.termios = undefined,
+
+    pub fn init() !NativeTerminal {
+        var t = NativeTerminal{};
+        t.original = try posix.tcgetattr(posix.STDIN_FILENO);
+        t.updateSize();
+        return t;
+    }
+
+    pub fn updateSize(self: *NativeTerminal) void {
         var ws: posix.winsize = .{ .row = 0, .col = 0, .xpixel = 0, .ypixel = 0 };
         _ = posix.system.ioctl(posix.STDOUT_FILENO, posix.T.IOCGWINSZ, @intFromPtr(&ws));
         if (ws.col > 0) self.width = @intCast(ws.col);
         if (ws.row > 0) self.height = @intCast(ws.row);
     }
 
-    pub fn enableRawMode(self: *Terminal) !void {
+    pub fn setSize(self: *NativeTerminal, w: usize, h: usize) void {
+        self.width = w;
+        self.height = h;
+    }
+
+    pub fn enableRawMode(self: *NativeTerminal) !void {
         var raw = self.original;
         raw.lflag.ICANON = false;
         raw.lflag.ECHO = false;
@@ -36,7 +78,7 @@ pub const Terminal = struct {
         try posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, raw);
     }
 
-    pub fn restore(self: *Terminal) void {
+    pub fn restore(self: *NativeTerminal) void {
         posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, self.original) catch {};
     }
 };
