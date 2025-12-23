@@ -6,6 +6,7 @@ const Cursor = @import("cursor.zig").Cursor;
 const VimMode = @import("mode.zig").VimMode;
 const Operator = @import("operator.zig").Operator;
 const Register = @import("register.zig").Register;
+const UndoStack = @import("undo.zig").UndoStack;
 const motions = @import("motions.zig");
 const operators = @import("operators.zig");
 
@@ -16,8 +17,10 @@ pub const VimEditor = struct {
     visual_start: Cursor,
     pending_op: Operator,
     pending_g: bool,
+    pending_replace: bool,
     op_start: Cursor,
     register: Register,
+    undo_stack: UndoStack,
     status_msg: []const u8,
     allocator: std.mem.Allocator,
     count: usize, // For number prefixes like 3j, 5w
@@ -30,8 +33,10 @@ pub const VimEditor = struct {
             .visual_start = .{},
             .pending_op = .none,
             .pending_g = false,
+            .pending_replace = false,
             .op_start = .{},
             .register = Register.init(allocator),
+            .undo_stack = UndoStack.init(allocator),
             .status_msg = "",
             .allocator = allocator,
             .count = 0,
@@ -41,6 +46,7 @@ pub const VimEditor = struct {
     pub fn deinit(self: *VimEditor) void {
         self.buffer.deinit();
         self.register.deinit();
+        self.undo_stack.deinit();
     }
 
     pub fn reset(self: *VimEditor) void {
@@ -50,10 +56,19 @@ pub const VimEditor = struct {
         self.visual_start = .{};
         self.pending_op = .none;
         self.pending_g = false;
+        self.pending_replace = false;
         self.op_start = .{};
         self.register.clear();
+        self.undo_stack.clear();
         self.status_msg = "";
         self.count = 0;
+    }
+
+    /// Save current state to undo stack before making changes
+    fn saveUndoState(self: *VimEditor) void {
+        self.undo_stack.push(&self.buffer, self.cursor) catch {
+            self.status_msg = "undo: out of memory";
+        };
     }
 
     pub fn handleKey(self: *VimEditor, key: u8) void {
