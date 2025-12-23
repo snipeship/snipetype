@@ -82,6 +82,20 @@ pub const VimEditor = struct {
     }
 
     fn handleNormal(self: *VimEditor, key: u8) void {
+        // Handle pending replace - next printable char replaces char under cursor
+        if (self.pending_replace) {
+            self.pending_replace = false;
+            if (key >= 32 and key < 127) {
+                const line_len = self.buffer.lineLen(self.cursor.row);
+                if (self.cursor.col < line_len) {
+                    self.saveUndoState();
+                    self.buffer.deleteChar(self.cursor);
+                    self.buffer.insertChar(self.cursor, key);
+                }
+            }
+            return;
+        }
+
         if (self.pending_g) {
             self.pending_g = false;
             if (key == 'g') {
@@ -226,18 +240,35 @@ pub const VimEditor = struct {
                 self.mode = .insert;
             },
             'J' => {
+                self.saveUndoState();
                 self.buffer.joinLines(self.cursor.row);
             },
 
             // Paste
-            'p' => self.pasteAfter(),
-            'P' => self.pasteBefore(),
+            'p' => {
+                self.saveUndoState();
+                self.pasteAfter();
+            },
+            'P' => {
+                self.saveUndoState();
+                self.pasteBefore();
+            },
 
             // Replace single char
-            'r' => self.status_msg = "r",
+            'r' => {
+                self.pending_replace = true;
+                self.status_msg = "r";
+            },
 
-            // Undo placeholder
-            'u' => self.status_msg = "undo (not implemented)",
+            // Undo
+            'u' => {
+                if (self.undo_stack.pop(&self.buffer)) |new_cursor| {
+                    self.cursor = new_cursor;
+                    motions.clampCursor(&self.buffer, &self.cursor, self.mode);
+                } else {
+                    self.status_msg = "Already at oldest change";
+                }
+            },
 
             else => {},
         }
