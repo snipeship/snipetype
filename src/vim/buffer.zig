@@ -171,4 +171,81 @@ pub const Buffer = struct {
         }
         return buf;
     }
+
+    /// Count characters matching target lines without allocation.
+    /// Returns struct with correct char count and total typed chars.
+    pub fn countMatchingChars(self: *const Buffer, target_lines: []const []const u8) struct { correct: usize, total: usize, errors: usize } {
+        var correct: usize = 0;
+        var total: usize = 0;
+        var errors: usize = 0;
+
+        const max_rows = @max(self.lines.items.len, target_lines.len);
+
+        for (0..max_rows) |row| {
+            const typed_line = if (row < self.lines.items.len) self.lines.items[row].items else "";
+            const target_line = if (row < target_lines.len) target_lines[row] else "";
+
+            const len = @min(typed_line.len, target_line.len);
+
+            // Compare characters in common range
+            for (0..len) |col| {
+                if (typed_line[col] == target_line[col]) {
+                    correct += 1;
+                } else {
+                    errors += 1;
+                }
+            }
+
+            // Count extra or missing characters as errors
+            if (typed_line.len > target_line.len) {
+                errors += typed_line.len - target_line.len;
+            } else if (typed_line.len < target_line.len) {
+                errors += target_line.len - typed_line.len;
+            }
+
+            total += typed_line.len;
+
+            // Count newline matching (except for last line)
+            if (row < self.lines.items.len - 1) {
+                total += 1; // We have a newline
+                if (row < target_lines.len - 1) {
+                    correct += 1; // Target also has newline here
+                } else {
+                    errors += 1; // Extra newline
+                }
+            } else if (row < target_lines.len - 1) {
+                // We don't have a newline but target does
+                errors += 1;
+            }
+        }
+
+        return .{ .correct = correct, .total = total, .errors = errors };
+    }
+
+    /// Calculate total character count (for quick length comparison)
+    pub fn totalChars(self: *const Buffer) usize {
+        var total: usize = 0;
+        for (self.lines.items, 0..) |line, i| {
+            total += line.items.len;
+            if (i < self.lines.items.len - 1) total += 1; // newline
+        }
+        return total;
+    }
+
+    /// Check if buffer content exactly matches target text (allocation-free)
+    pub fn matchesTarget(self: *const Buffer, target_lines: []const []const u8, target_len: usize) bool {
+        // Quick length check first
+        if (self.totalChars() != target_len) return false;
+
+        // Line count must match
+        if (self.lines.items.len != target_lines.len) return false;
+
+        // Compare line by line
+        for (self.lines.items, 0..) |line, row| {
+            if (row >= target_lines.len) return false;
+            if (!std.mem.eql(u8, line.items, target_lines[row])) return false;
+        }
+
+        return true;
+    }
 };
