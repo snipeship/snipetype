@@ -133,160 +133,153 @@ class CanvasTerminal {
 class OneApp {
   constructor() {
     this.term = null;
-    this.fitAddon = null;
     this.wasm = null;
     this.wasmMemory = null;
-    this.decoder = new TextDecoder("utf-8");
     this.encoder = new TextEncoder();
     this.stagingPtr = 0;
     this.stagingCap = 0;
-    this.animationFrameId = null;
     this.lastThemeId = null;
+    this.cols = 80;
+    this.rows = 24;
+    this.animationId = null;
   }
 
-  /**
-   * Initialize the application
-   */
   async init() {
-    // Initialize ghostty-web
-    await ghosttyInit();
+    const container = document.getElementById("terminal");
 
-    const { bg: initialBg, fg: initialFg } = resolveThemeColors(0);
+    // Calculate optimal grid size
+    this.calculateSize(container);
 
-    // Create terminal
-    this.term = new Terminal({
-      fontSize: FONT_SIZE,
-      fontFamily: FONT_FAMILY,
-      cursorBlink: false,
-      cursorStyle: "block",
-      allowProposedApi: true,
-      theme: {
-        ...TERMINAL_THEME_BASE,
-        background: initialBg,
-        foreground: initialFg,
-      },
-    });
+    // Create canvas terminal
+    this.term = new CanvasTerminal(container, this.cols, this.rows);
 
-    this.fitAddon = new FitAddon();
-    this.term.loadAddon(this.fitAddon);
-
-    const termEl = document.getElementById("terminal");
-    this.term.open(termEl);
-    this.fitAddon.fit();
-    this.fitAddon.observeResize();
-
-    // Prevent browser shortcuts that conflict with the app
-    this.setupKeyboardOverrides();
-
-    // Load WASM module
+    // Load WASM
     await this.loadWasm();
 
-    // Connect terminal to WASM
-    this.connectTerminal();
+    // Initialize WASM app
+    const rc = this.wasm.one_web_init(this.cols, this.rows, randomU32());
+    if (rc !== 0) throw new Error(`one_web_init failed: ${rc}`);
 
-    // Resize WASM to match terminal on container resize
-    this.term.onResize(({ cols, rows }) => {
-      this.wasm.one_web_resize(cols, rows);
-      this.wasm.one_web_tick();
-    });
+    // Setup input
+    this.setupInput();
 
-    // Initial fit and WASM init
-    const rc = this.wasm.one_web_init(
-      this.term.cols,
-      this.term.rows,
-      randomU32(),
-    );
-    if (rc !== 0) {
-      throw new Error(`one_web_init failed with code ${rc}`);
-    }
+    // Setup resize
+    this.setupResize(container);
 
-    // Initial render
-    this.wasm.one_web_tick();
-    this.syncWebTheme(true);
-
-    // Start animation loop
+    // Start render loop
     this.startLoop();
 
-    // Hide loading screen
+    // Sync theme
+    this.syncWebTheme(true);
+
+    // Hide loading
     document.getElementById("loading").classList.add("hidden");
 
-    // Focus terminal
+    // Focus
     this.term.focus();
   }
 
-  /**
-   * Prevent browser default behavior for keys we need
-   * and send modified arrow escape sequences
-   */
-  setupKeyboardOverrides() {
-    window.addEventListener(
-      "keydown",
-      (e) => {
-        // Ctrl+P (print dialog)
-        if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
-          e.preventDefault();
-        }
-        // Tab (focus navigation)
-        if (e.key === "Tab") {
-          e.preventDefault();
-        }
-        // Arrow keys - prevent scroll and handle modifiers
-        if (
-          ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
-        ) {
-          e.preventDefault();
+  calculateSize(container) {
+    // Create temp canvas to measure font
+    const tempCanvas = document.createElement("canvas");
+    const ctx = tempCanvas.getContext("2d");
+    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    const charWidth = Math.ceil(ctx.measureText("M").width);
+    const charHeight = Math.ceil(FONT_SIZE * LINE_HEIGHT);
 
-          // For modified arrows, send escape sequences directly
-          // since some terminal emulators may not handle them
-          if (e.shiftKey || e.ctrlKey || e.metaKey) {
-            const dirMap = {
-              ArrowUp: "A",
-              ArrowDown: "B",
-              ArrowRight: "C",
-              ArrowLeft: "D",
-            };
-            const dir = dirMap[e.key];
-            // Modifier: 2 = Shift, 5 = Ctrl (or Cmd on Mac)
-            const mod = e.shiftKey ? "2" : "5";
-            const seq = `\x1b[1;${mod}${dir}`;
-            this.sendToWasm(seq);
-            this.wasm.one_web_tick();
-            this.syncWebTheme();
-          }
-        }
-      },
-      { capture: true },
-    );
+    // Calculate grid size based on container
+    const maxWidth = container.clientWidth - 32; // padding
+    const maxHeight = container.clientHeight - 32;
+
+    this.cols = Math.max(40, Math.floor(maxWidth / charWidth));
+    this.rows = Math.max(10, Math.floor(maxHeight / charHeight));
   }
 
-  /**
-   * Load and instantiate the WASM module
-   */
+  setupInput() {
+    this.term.canvas.addEventListener("keydown", (e) => {
+      const bytes = this.keyToBytes(e);
+      if (bytes) {
+        e.preventDefault();
+        this.sendToWasm(bytes);
+      }
+    });
+
+    // Prevent tab from losing focus
+    this.term.canvas.addEventListener("keydown", (e) => {
+      if (e.key === "Tab") e.preventDefault();
+    });
+  }
+
+  keyToBytes(e) {
+    const { key, ctrlKey, metaKey, shiftKey } = e;
+
+    // Ctrl combinations
+    if (ctrlKey || metaKey) {
+      if (key === "c" || key === "C") return "\x03";
+      if (key === "p" || key === "P") return "\x10";
+    }
+
+    // Special keys
+    switch (key) {
+      case "Escape":
+        return "\x1b";
+      case "Enter":
+        return "\r";
+      case "Backspace":
+        return "\x7f";
+      case "Tab":
+        return "\t";
+      case "ArrowUp":
+        return ctrlKey || metaKey
+          ? "\x1b[1;5A"
+          : shiftKey
+            ? "\x1b[1;2A"
+            : "\x1b[A";
+      case "ArrowDown":
+        return ctrlKey || metaKey
+          ? "\x1b[1;5B"
+          : shiftKey
+            ? "\x1b[1;2B"
+            : "\x1b[B";
+      case "ArrowRight":
+        return ctrlKey || metaKey
+          ? "\x1b[1;5C"
+          : shiftKey
+            ? "\x1b[1;2C"
+            : "\x1b[C";
+      case "ArrowLeft":
+        return ctrlKey || metaKey
+          ? "\x1b[1;5D"
+          : shiftKey
+            ? "\x1b[1;2D"
+            : "\x1b[D";
+      case "Home":
+        return "\x1b[H";
+      case "End":
+        return "\x1b[F";
+      case "Delete":
+        return "\x1b[3~";
+    }
+
+    // Printable characters
+    if (key.length === 1) return key;
+    return null;
+  }
+
+  setupResize(container) {
+    const resizeObserver = new ResizeObserver(() => {
+      this.calculateSize(container);
+      this.term.resize(this.cols, this.rows);
+      this.wasm.one_web_resize(this.cols, this.rows);
+    });
+    resizeObserver.observe(container);
+  }
+
   async loadWasm() {
     const imports = {
       env: {
-        // Output: WASM writes ANSI bytes to terminal
-        js_write: (ptr, len) => {
-          const bytes = new Uint8Array(
-            this.wasmMemory.buffer,
-            ptr >>> 0,
-            len >>> 0,
-          );
-          this.term.write(this.decoder.decode(bytes));
-        },
-
-        // Time: return current time in milliseconds
         js_now_ms: () => performance.now(),
-
-        // Theme: check if system prefers light mode
-        js_system_prefers_light: () => {
-          return (
-            window.matchMedia &&
-            window.matchMedia("(prefers-color-scheme: light)").matches
-          );
-        },
-
-        // Random: return a random 32-bit integer
+        js_system_prefers_light: () => systemPrefersLight(),
         js_random_u32: () => randomU32(),
       },
     };
@@ -297,68 +290,74 @@ class OneApp {
 
     this.wasm = result.instance.exports;
     this.wasmMemory = this.wasm.memory;
-
-    // Get staging buffer info
     this.stagingPtr = this.wasm.one_web_input_staging_ptr();
     this.stagingCap = this.wasm.one_web_input_staging_cap();
   }
 
-  /**
-   * Connect terminal input to WASM
-   */
-  connectTerminal() {
-    this.term.onData((data) => {
-      this.sendToWasm(data);
-      // Immediate tick for responsiveness
-      this.wasm.one_web_tick();
-      this.syncWebTheme();
-    });
-  }
-
-  /**
-   * Send input data to WASM via staging buffer
-   */
   sendToWasm(dataStr) {
     const bytes = this.encoder.encode(dataStr);
     let offset = 0;
 
     while (offset < bytes.length) {
       const chunkSize = Math.min(bytes.length - offset, this.stagingCap);
-      const chunk = bytes.subarray(offset, offset + chunkSize);
-
-      // Copy to staging buffer
       const staging = new Uint8Array(
         this.wasmMemory.buffer,
         this.stagingPtr,
         chunkSize,
       );
-      staging.set(chunk);
-
-      // Commit to WASM
+      staging.set(bytes.subarray(offset, offset + chunkSize));
       this.wasm.one_web_input_commit(chunkSize);
-
       offset += chunkSize;
     }
   }
 
-  /**
-   * Fit terminal to container
-   */
-  fit() {
-    this.fitAddon.fit();
-    return { cols: this.term.cols, rows: this.term.rows };
-  }
-
-  /**
-   * Start the animation loop
-   */
   startLoop() {
     const loop = () => {
       this.wasm.one_web_tick();
+
+      if (this.wasm.one_web_is_dirty()) {
+        this.render();
+        this.wasm.one_web_clear_dirty();
+      }
+
       this.syncWebTheme();
-      this.animationFrameId = requestAnimationFrame(loop);
+      this.animationId = requestAnimationFrame(loop);
     };
-    this.animationFrameId = requestAnimationFrame(loop);
+    this.animationId = requestAnimationFrame(loop);
+  }
+
+  render() {
+    const ptr = this.wasm.one_web_get_cells_ptr();
+    const w = this.wasm.one_web_get_grid_width();
+    const h = this.wasm.one_web_get_grid_height();
+
+    if (!ptr || !w || !h) return;
+
+    const cells = new Uint8Array(this.wasmMemory.buffer, ptr, w * h * CELL_SIZE);
+
+    // Get background color from first cell for clear
+    const bgR = cells[5],
+      bgG = cells[6],
+      bgB = cells[7];
+    this.term.clear(`rgb(${bgR},${bgG},${bgB})`);
+
+    // Draw all cells
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * CELL_SIZE;
+        const char = cells[i];
+        const flags = cells[i + 1];
+        const fgR = cells[i + 2],
+          fgG = cells[i + 3],
+          fgB = cells[i + 4];
+        const bgR = cells[i + 5],
+          bgG = cells[i + 6],
+          bgB = cells[i + 7];
+        const bold = (flags & 1) !== 0;
+
+        this.term.drawCell(x, y, char, fgR, fgG, fgB, bgR, bgG, bgB, bold);
+      }
+    }
   }
 
   syncWebTheme(force = false) {
