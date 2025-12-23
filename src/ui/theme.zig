@@ -17,7 +17,11 @@ pub const ThemeId = enum(u8) {
 pub const Theme = struct {
     name: []const u8,
 
-    // Base colors
+    /// When true, use terminal's native colors instead of explicit RGB.
+    /// This allows user's terminal theme (transparency, custom bg) to show through.
+    use_terminal_defaults: bool = false,
+
+    // Base colors (ignored when use_terminal_defaults is true for native)
     bg: Color,
     fg: Color,
 
@@ -66,7 +70,7 @@ pub fn options() []const ThemeOption {
 
 pub fn resolve(id: ThemeId) *const Theme {
     return switch (id) {
-        .system => if (systemPrefersLight()) &THEMES.one_light else &THEMES.one_dark,
+        .system => &THEMES.system,
         .one_dark => &THEMES.one_dark,
         .one_light => &THEMES.one_light,
         .dracula => &THEMES.dracula,
@@ -103,6 +107,32 @@ extern "env" fn js_system_prefers_light() bool;
 // ============================================================================
 
 pub const THEMES = struct {
+    /// System theme: uses terminal's native colors for bg/fg.
+    /// Other colors use sensible defaults that work on most terminals.
+    pub const system = Theme{
+        .name = "System",
+        .use_terminal_defaults = true,
+        // These are fallbacks - native terminal won't use bg/fg directly
+        .bg = Color.rgb(0, 0, 0),
+        .fg = Color.rgb(255, 255, 255),
+        // Use standard ANSI-ish colors that work well on most terminals
+        .accent = Color.rgb(99, 102, 241), // indigo
+        .success = Color.rgb(34, 197, 94), // green
+        .danger = Color.rgb(239, 68, 68), // red
+        .warning = Color.rgb(250, 204, 21), // yellow
+        .extra = Color.rgb(251, 146, 60), // orange
+        .info = Color.rgb(34, 211, 238), // cyan
+        .dim = Color.rgb(128, 128, 128), // gray
+        .dimmer = Color.rgb(96, 96, 96), // darker gray
+        .cursor_bg = Color.rgb(99, 102, 241),
+        .cursor_insert_bg = Color.rgb(34, 197, 94),
+        .cursor_fg = Color.rgb(255, 255, 255),
+        .error_bg = Color.rgb(60, 20, 20),
+        .visual_bg = Color.rgb(60, 60, 100),
+        .visual_fg = Color.rgb(255, 255, 255),
+        .border = Color.rgb(96, 96, 96),
+    };
+
     pub const one_dark = Theme{
         .name = "ONE Dark",
         .bg = Color.rgb(40, 44, 52),
