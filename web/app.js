@@ -1,30 +1,24 @@
 /**
- * ONE Web - JavaScript Host Application
+ * ONE Web - JavaScript Host Application (Canvas2D Version)
  *
- * This file:
- * - Initializes ghostty-web terminal
- * - Loads and instantiates the WASM module
- * - Bridges input/output between terminal and WASM
- * - Drives the animation loop
+ * Uses Canvas 2D API for crisp font rendering with JetBrains Mono.
+ * Reads cell grid directly from WASM memory.
  */
-
-import { init as ghosttyInit, Terminal, FitAddon } from "ghostty-web";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 const FONT_SIZE = 16;
-const FONT_FAMILY =
-  '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace';
+const FONT_FAMILY = '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace';
+const LINE_HEIGHT = 1.2;
 
-const TERMINAL_THEME_BASE = {
-  cursor: "#6366f1",
-  cursorAccent: "#ffffff",
-  selectionBackground: "rgba(99, 102, 241, 0.3)",
-};
+// Cell structure: 8 bytes (char, flags, fg_r, fg_g, fg_b, bg_r, bg_g, bg_b)
+const CELL_SIZE = 8;
 
+// Theme colors for page background
 const THEME_COLORS_BY_ID = {
+  0: null, // system
   1: { bg: "#282c34", fg: "#abb2bf" }, // one_dark
   2: { bg: "#fafafa", fg: "#0f172a" }, // one_light
   3: { bg: "#282a36", fg: "#f8f8f2" }, // dracula
@@ -47,17 +41,92 @@ function resolveThemeColors(themeId) {
   return THEME_COLORS_BY_ID[themeId] ?? THEME_COLORS_BY_ID[1];
 }
 
+function randomU32() {
+  return crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+}
+
 // ============================================================================
-// Utility Functions
+// Canvas Terminal Renderer
 // ============================================================================
 
-/**
- * Generate a random 32-bit unsigned integer
- */
-function randomU32() {
-  const arr = new Uint32Array(1);
-  crypto.getRandomValues(arr);
-  return arr[0] >>> 0;
+class CanvasTerminal {
+  constructor(container, cols, rows) {
+    this.cols = cols;
+    this.rows = rows;
+    this.charWidth = 0;
+    this.charHeight = 0;
+
+    // Create canvas
+    this.canvas = document.createElement("canvas");
+    this.canvas.tabIndex = 0;
+    this.canvas.style.outline = "none";
+    container.appendChild(this.canvas);
+
+    this.ctx = this.canvas.getContext("2d");
+
+    // Measure character dimensions
+    this.measureFont();
+
+    // Size canvas
+    this.resize(cols, rows);
+  }
+
+  measureFont() {
+    this.ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    const metrics = this.ctx.measureText("M");
+    this.charWidth = Math.ceil(metrics.width);
+    this.charHeight = Math.ceil(FONT_SIZE * LINE_HEIGHT);
+  }
+
+  resize(cols, rows) {
+    this.cols = cols;
+    this.rows = rows;
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = cols * this.charWidth;
+    const height = rows * this.charHeight;
+
+    this.canvas.width = width * dpr;
+    this.canvas.height = height * dpr;
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+
+    this.ctx.scale(dpr, dpr);
+    this.ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    this.ctx.textBaseline = "top";
+  }
+
+  clear(bgColor = "#282c34") {
+    this.ctx.fillStyle = bgColor;
+    this.ctx.fillRect(
+      0,
+      0,
+      this.cols * this.charWidth,
+      this.rows * this.charHeight,
+    );
+  }
+
+  drawCell(x, y, char, fgR, fgG, fgB, bgR, bgG, bgB, bold = false) {
+    const px = x * this.charWidth;
+    const py = y * this.charHeight;
+
+    // Draw background
+    this.ctx.fillStyle = `rgb(${bgR},${bgG},${bgB})`;
+    this.ctx.fillRect(px, py, this.charWidth, this.charHeight);
+
+    // Draw character
+    if (char > 32 && char < 127) {
+      this.ctx.fillStyle = `rgb(${fgR},${fgG},${fgB})`;
+      this.ctx.font = `${bold ? "bold " : ""}${FONT_SIZE}px ${FONT_FAMILY}`;
+      // Center vertically with a small offset for better alignment
+      const textY = py + (this.charHeight - FONT_SIZE) / 2 + 1;
+      this.ctx.fillText(String.fromCharCode(char), px, textY);
+    }
+  }
+
+  focus() {
+    this.canvas.focus();
+  }
 }
 
 // ============================================================================
