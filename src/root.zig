@@ -1,6 +1,4 @@
-//! ╔═══════════════════════════════════════════════════════════════════════════╗
-//! ║  ONE - Lightning Fast Typing Speed Test with Full Vim Editor              ║
-//! ╚═══════════════════════════════════════════════════════════════════════════╝
+//! ONE - Core library exports
 
 const types = @import("types.zig");
 const rng = @import("rng.zig");
