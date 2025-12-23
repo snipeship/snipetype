@@ -28,10 +28,7 @@ const THEME_COLORS_BY_ID = {
 };
 
 function systemPrefersLight() {
-  return (
-    window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: light)").matches
-  );
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches;
 }
 
 function resolveThemeColors(themeId) {
