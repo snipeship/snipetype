@@ -414,8 +414,11 @@ pub const RenderBuffer = struct {
     }
 
     pub fn flush(self: *RenderBuffer) void {
-        if (self.data.items.len > 0) {
-            _ = posix.write(posix.STDOUT_FILENO, self.data.items) catch {};
+        var remaining = self.data.items;
+        while (remaining.len > 0) {
+            const n = posix.write(posix.STDOUT_FILENO, remaining) catch return;
+            if (n == 0) return;
+            remaining = remaining[n..];
         }
     }
 };
