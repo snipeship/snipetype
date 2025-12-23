@@ -110,11 +110,34 @@ pub const AnsiRenderer = struct {
     fn clear(ptr: *anyopaque) void {
         const self = cast(ptr);
         self.appendSlice("\x1b[2J\x1b[H");
+        if (!self.use_terminal_defaults) {
+            // Fill entire screen with spaces to ensure background is applied
+            // (ANSI erase codes don't reliably use the current bg color)
+            self.appendFmt("\x1b[48;2;{d};{d};{d}m", .{ self.default_bg.r, self.default_bg.g, self.default_bg.b });
+            self.appendFmt("\x1b[38;2;{d};{d};{d}m", .{ self.default_fg.r, self.default_fg.g, self.default_fg.b });
+            for (0..self.term_height) |_| {
+                for (0..self.term_width) |_| {
+                    self.data.append(self.allocator, ' ') catch {};
+                }
+            }
+            self.appendSlice("\x1b[H"); // Return home
+        }
     }
 
     fn clearLine(ptr: *anyopaque) void {
         const self = cast(ptr);
-        self.appendSlice("\x1b[2K");
+        if (!self.use_terminal_defaults) {
+            // Move to column 1, set bg, fill with spaces, stay at end
+            self.appendSlice("\x1b[1G"); // Move to column 1
+            self.appendFmt("\x1b[48;2;{d};{d};{d}m", .{ self.default_bg.r, self.default_bg.g, self.default_bg.b });
+            self.appendFmt("\x1b[38;2;{d};{d};{d}m", .{ self.default_fg.r, self.default_fg.g, self.default_fg.b });
+            for (0..self.term_width) |_| {
+                self.data.append(self.allocator, ' ') catch {};
+            }
+            self.appendSlice("\x1b[1G"); // Move back to column 1
+        } else {
+            self.appendSlice("\x1b[2K");
+        }
     }
 
     fn flush(ptr: *anyopaque) void {
