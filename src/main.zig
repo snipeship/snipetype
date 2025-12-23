@@ -40,6 +40,8 @@ pub fn main() !void {
     var last_state: one.TestState = test_state.state;
     var last_render: i64 = 0;
 
+    var input = one.Input.init();
+
     while (true) {
         const prev_w = term.width;
         const prev_h = term.height;
@@ -52,41 +54,44 @@ pub fn main() !void {
         const now = std.time.milliTimestamp();
 
         // Input
-        while (one.readKey()) |key| {
+        while (input.readKey()) |key| {
             switch (key) {
-                0x03 => { // Ctrl+C always quits
-                    buf.clear();
-                    buf.write(ansi.CLEAR ++ ansi.SHOW_CURSOR);
-                    buf.flush();
-                    return;
-                },
-                0x1b => { // Escape
-                    if (test_state.config.mode == .vim) {
-                        test_state.handleKey(27);
-                        dirty = true;
-                    } else {
+                .Byte => |b| switch (b) {
+                    0x03 => { // Ctrl+C always quits
                         buf.clear();
                         buf.write(ansi.CLEAR ++ ansi.SHOW_CURSOR);
                         buf.flush();
                         return;
-                    }
-                },
-                '\t' => {
-                    if (test_state.config.mode == .vim and test_state.vim.mode == .insert and test_state.state != .finished) {
-                        test_state.handleKey('\t');
+                    },
+                    0x1b => { // Escape
+                        if (test_state.config.mode == .vim) {
+                            test_state.handleKey(27);
+                            dirty = true;
+                        } else {
+                            buf.clear();
+                            buf.write(ansi.CLEAR ++ ansi.SHOW_CURSOR);
+                            buf.flush();
+                            return;
+                        }
+                    },
+                    '\t' => {
+                        if (test_state.config.mode == .vim and test_state.vim.mode == .insert and test_state.state != .finished) {
+                            test_state.handleKey('\t');
+                            dirty = true;
+                        } else {
+                            seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+                            try test_state.reset(seed);
+                            dirty = true;
+                            needs_full_clear = true;
+                            last_state = test_state.state;
+                        }
+                    },
+                    else => {
+                        test_state.handleKey(b);
                         dirty = true;
-                    } else {
-                        seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-                        try test_state.reset(seed);
-                        dirty = true;
-                        needs_full_clear = true;
-                        last_state = test_state.state;
-                    }
+                    },
                 },
-                else => {
-                    test_state.handleKey(key);
-                    dirty = true;
-                },
+                .ArrowUp, .ArrowDown, .ArrowLeft, .ArrowRight => {},
             }
         }
 
