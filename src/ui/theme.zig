@@ -85,6 +85,50 @@ fn systemPrefersLight() bool {
 }
 
 const THEMES = struct {
+    pub const system_dark: Theme = .{
+        .name = "ONE Dark",
+        .bg = "",
+        .fg = "",
+        .base = ansi.RESET,
+        .accent = "\x1b[38;2;99;102;241m",
+        .success = "\x1b[38;2;34;197;94m",
+        .danger = "\x1b[38;2;239;68;68m",
+        .warning = "\x1b[38;2;250;204;21m",
+        .extra = "\x1b[38;2;251;146;60m",
+        .info = "\x1b[38;2;34;211;238m",
+        .dim = "\x1b[38;2;100;100;120m",
+        .dimmer = "\x1b[38;2;60;60;80m",
+        .cursor_bg = "\x1b[48;2;99;102;241m",
+        .cursor_insert_bg = "\x1b[48;2;34;197;94m",
+        .cursor_fg = "\x1b[38;2;255;255;255m",
+        .error_bg = "\x1b[48;2;50;20;20m",
+        .visual_bg = "\x1b[48;2;60;60;100m",
+        .visual_fg = "\x1b[38;2;255;255;255m",
+        .border = "\x1b[38;2;60;60;80m",
+    };
+
+    pub const system_light: Theme = .{
+        .name = "ONE Light",
+        .bg = "",
+        .fg = "",
+        .base = ansi.RESET,
+        .accent = "\x1b[38;2;79;70;229m",
+        .success = "\x1b[38;2;22;163;74m",
+        .danger = "\x1b[38;2;220;38;38m",
+        .warning = "\x1b[38;2;161;98;7m",
+        .extra = "\x1b[38;2;234;88;12m",
+        .info = "\x1b[38;2;8;145;178m",
+        .dim = "\x1b[38;2;71;85;105m",
+        .dimmer = "\x1b[38;2;148;163;184m",
+        .cursor_bg = "\x1b[48;2;79;70;229m",
+        .cursor_insert_bg = "\x1b[48;2;22;163;74m",
+        .cursor_fg = "\x1b[38;2;255;255;255m",
+        .error_bg = "\x1b[48;2;254;226;226m",
+        .visual_bg = "\x1b[48;2;224;231;255m",
+        .visual_fg = "\x1b[38;2;15;23;42m",
+        .border = "\x1b[38;2;148;163;184m",
+    };
+
     pub const one_dark: Theme = .{
         .name = "ONE Dark",
         .bg = "\x1b[48;2;40;44;52m",
