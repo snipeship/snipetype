@@ -157,8 +157,25 @@ pub const App = struct {
                     return .handled;
                 },
             },
-            // Arrow keys are currently unused in main app (vim handles its own)
-            .ArrowUp, .ArrowDown, .ArrowLeft, .ArrowRight => return .none,
+            // Arrow keys - route to vim mode for navigation
+            .ArrowUp,
+            .ArrowDown,
+            .ArrowLeft,
+            .ArrowRight,
+            .ShiftArrowLeft,
+            .ShiftArrowRight,
+            .CtrlArrowLeft,
+            .CtrlArrowRight,
+            .CtrlArrowUp,
+            .CtrlArrowDown,
+            => {
+                if (self.test_state.config.mode == .vim) {
+                    self.test_state.vim.handleArrow(key);
+                    self.dirty = true;
+                    return .handled;
+                }
+                return .none;
+            },
         }
     }
 
