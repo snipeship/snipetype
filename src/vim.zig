@@ -721,37 +721,55 @@ pub const VimEditor = struct {
         }
     }
 
-    fn setYank(self: *VimEditor, content: []u8, is_line: bool) void {
+    fn setYank(self: *VimEditor, content: []const u8, is_line: bool) void {
         self.yank_register.clearRetainingCapacity();
         self.yank_register.appendSlice(self.allocator, content) catch {};
         self.yank_is_line = is_line;
-        self.allocator.free(content);
     }
 
     fn pasteAfter(self: *VimEditor) void {
         if (self.yank_register.items.len == 0) return;
         if (self.yank_is_line) {
-            self.buffer.insertLine(self.cursor.row + 1, self.yank_register.items);
+            var insert_row = self.cursor.row + 1;
+            var it = std.mem.splitScalar(u8, self.yank_register.items, '\n');
+            while (it.next()) |line| {
+                self.buffer.insertLine(insert_row, line);
+                insert_row += 1;
+            }
             self.cursor.row += 1;
             self.cursor.col = 0;
         } else {
-            for (self.yank_register.items) |char| {
-                self.cursor.col += 1;
-                self.buffer.insertChar(.{ .row = self.cursor.row, .col = self.cursor.col - 1 }, char);
+            const line_len = self.buffer.lineLen(self.cursor.row);
+            const insert_col = @min(self.cursor.col + 1, line_len);
+            for (self.yank_register.items, 0..) |char, i| {
+                self.buffer.insertChar(.{ .row = self.cursor.row, .col = insert_col + i }, char);
             }
+            if (self.yank_register.items.len > 0) {
+                self.cursor.col = insert_col + self.yank_register.items.len - 1;
+            }
+            self.clampCursor();
         }
     }
 
     fn pasteBefore(self: *VimEditor) void {
         if (self.yank_register.items.len == 0) return;
         if (self.yank_is_line) {
-            self.buffer.insertLine(self.cursor.row, self.yank_register.items);
+            var insert_row = self.cursor.row;
+            var it = std.mem.splitScalar(u8, self.yank_register.items, '\n');
+            while (it.next()) |line| {
+                self.buffer.insertLine(insert_row, line);
+                insert_row += 1;
+            }
             self.cursor.col = 0;
         } else {
             const start_col = self.cursor.col;
             for (self.yank_register.items, 0..) |char, i| {
                 self.buffer.insertChar(.{ .row = self.cursor.row, .col = start_col + i }, char);
             }
+            if (self.yank_register.items.len > 0) {
+                self.cursor.col = start_col + self.yank_register.items.len - 1;
+            }
+            self.clampCursor();
         }
     }
 
