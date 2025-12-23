@@ -67,6 +67,7 @@ pub const Renderer = struct {
         getWidth: *const fn (*anyopaque) usize,
         getHeight: *const fn (*anyopaque) usize,
         setDefaultColors: *const fn (*anyopaque, Color, Color) void,
+        setUseTerminalDefaults: *const fn (*anyopaque, bool) void,
     };
 
     // Forwarding methods
@@ -120,6 +121,11 @@ pub const Renderer = struct {
 
     pub inline fn setDefaultColors(self: Renderer, fg: Color, bg: Color) void {
         self.vtable.setDefaultColors(self.ptr, fg, bg);
+    }
+
+    /// Set whether to use terminal's native colors (for native renderer only)
+    pub inline fn setUseTerminalDefaults(self: Renderer, use_defaults: bool) void {
+        self.vtable.setUseTerminalDefaults(self.ptr, use_defaults);
     }
 
     /// Print formatted text
