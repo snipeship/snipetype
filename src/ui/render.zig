@@ -9,6 +9,66 @@ const TypingTest = @import("../core/typing_test.zig").TypingTest;
 const BOLD = ansi.BOLD;
 const CLEAR_LINE = ansi.CLEAR_LINE;
 
+// ============================================================================
+// Common UI Elements
+// ============================================================================
+
+/// Render the "ONE" header at top center
+fn renderHeader(buf: *RenderBuffer, cx: usize, theme: *const theme_mod.Theme) void {
+    buf.moveTo(cx -| 1, 1);
+    buf.write(BOLD);
+    buf.write(theme.accent);
+    buf.write("ONE");
+    buf.write(theme.base);
+}
+
+/// Render a horizontal divider line
+fn renderDivider(buf: *RenderBuffer, cx: usize, y: usize, theme: *const theme_mod.Theme) void {
+    buf.moveTo(cx -| 20, y);
+    buf.write(theme.dimmer);
+    var i: usize = 0;
+    while (i < 40) : (i += 1) buf.write("─");
+    buf.write(theme.base);
+}
+
+/// Render timer display (handles both countdown and elapsed time)
+fn renderTimer(buf: *RenderBuffer, t: *TypingTest, theme: *const theme_mod.Theme) void {
+    if (t.config.time_limit > 0) {
+        const rem = t.getRemainingSeconds();
+        if (rem <= 5) {
+            buf.write(theme.danger);
+            buf.write(BOLD);
+        } else if (rem <= 10) {
+            buf.write(theme.extra);
+        } else {
+            buf.write(theme.dim);
+        }
+        buf.print("{d:.1}s", .{rem});
+    } else {
+        buf.write(theme.dim);
+        buf.print("{d:.1}s", .{t.getElapsedSeconds()});
+    }
+    buf.write(theme.base);
+}
+
+/// Render live WPM display
+fn renderWPM(buf: *RenderBuffer, t: *TypingTest, theme: *const theme_mod.Theme) void {
+    const wpm = t.getLiveWPM();
+    if (wpm > 0) {
+        buf.write("  ");
+        buf.write(theme.accent);
+        buf.print("{d:.0}", .{wpm});
+        buf.write(theme.base);
+        buf.write(theme.dimmer);
+        buf.write(" wpm");
+        buf.write(theme.base);
+    }
+}
+
+// ============================================================================
+// Main Render Functions
+// ============================================================================
+
 // Render (words/sentences/code)
 
 pub fn renderSimple(buf: *RenderBuffer, term: *Terminal, t: *TypingTest, theme: *const theme_mod.Theme) void {
