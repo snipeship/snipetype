@@ -235,6 +235,8 @@ pub const VimEditor = struct {
     mode: VimMode,
     visual_start: Cursor,
     pending_op: Operator,
+    pending_g: bool,
+    op_start: Cursor,
     yank_register: std.ArrayList(u8),
     yank_is_line: bool,
     status_msg: []const u8,
@@ -248,6 +250,8 @@ pub const VimEditor = struct {
             .mode = .normal,
             .visual_start = .{},
             .pending_op = .none,
+            .pending_g = false,
+            .op_start = .{},
             .yank_register = std.ArrayList(u8){},
             .yank_is_line = false,
             .status_msg = "",
@@ -267,6 +271,8 @@ pub const VimEditor = struct {
         self.mode = .normal;
         self.visual_start = .{};
         self.pending_op = .none;
+        self.pending_g = false;
+        self.op_start = .{};
         self.yank_register.clearRetainingCapacity();
         self.yank_is_line = false;
         self.status_msg = "";
@@ -284,6 +290,15 @@ pub const VimEditor = struct {
     }
 
     fn handleNormal(self: *VimEditor, key: u8) void {
+        if (self.pending_g) {
+            self.pending_g = false;
+            if (key == 'g') {
+                self.cursor.row = 0;
+                self.cursor.col = 0;
+                return;
+            }
+        }
+
         // Handle count prefix
         if (key >= '1' and key <= '9' and self.count == 0) {
             self.count = key - '0';
@@ -319,7 +334,10 @@ pub const VimEditor = struct {
             '0' => self.cursor.col = 0,
             '^' => self.moveToFirstNonBlank(),
             '$' => self.moveToEndOfLine(),
-            'g' => self.pending_op = .none, // Will handle gg with state
+            'g' => {
+                self.pending_g = true;
+                return;
+            },
             'G' => self.moveToLastLine(),
 
             // Insert mode
