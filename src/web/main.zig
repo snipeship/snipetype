@@ -2,11 +2,11 @@
 //!
 //! Exports a C-style API for JavaScript to drive the application.
 //! The main loop is driven by JS calling tick() on requestAnimationFrame.
+//! Uses CellRenderer for direct cell grid access from JavaScript.
 
 const std = @import("std");
 const one = @import("one");
 
-const ansi = one.ansi;
 const theme_mod = one.theme;
 const time = one.time;
 
@@ -29,8 +29,7 @@ var input_staging: [4096]u8 = undefined;
 const WebApp = struct {
     allocator: std.mem.Allocator,
     app: one.App,
-    term: one.Terminal,
-    buf: one.RenderBuffer,
+    cell_renderer: one.CellRenderer,
     input: one.Input,
 };
 
@@ -76,13 +75,11 @@ export fn one_web_init(cols: u32, rows: u32, seed: u32) i32 {
     }
 
     const allocator = allocator_instance;
+    const w: usize = @intCast(cols);
+    const h: usize = @intCast(rows);
 
-    // Initialize terminal with size from JS
-    var term = one.Terminal.init() catch return -1;
-    term.setSize(@intCast(cols), @intCast(rows));
-
-    // Initialize render buffer
-    var buf = one.RenderBuffer.init(allocator);
+    // Initialize cell renderer
+    var cell_renderer = one.CellRenderer.init(allocator, w, h) catch return -1;
 
     // Default config
     const cfg = one.Config{
@@ -93,18 +90,15 @@ export fn one_web_init(cols: u32, rows: u32, seed: u32) i32 {
     };
 
     // Initialize app
-    const app = one.App.init(allocator, @as(u64, seed), cfg) catch return -2;
-
-    // Initial terminal setup
-    buf.write(ansi.RESET ++ ansi.CLEAR ++ ansi.HIDE_CURSOR);
-    buf.flush();
-    buf.clear();
+    const app = one.App.init(allocator, @as(u64, seed), cfg) catch {
+        cell_renderer.deinit();
+        return -2;
+    };
 
     web_app = WebApp{
         .allocator = allocator,
         .app = app,
-        .term = term,
-        .buf = buf,
+        .cell_renderer = cell_renderer,
         .input = one.Input.init(),
     };
 
@@ -115,7 +109,7 @@ export fn one_web_init(cols: u32, rows: u32, seed: u32) i32 {
 export fn one_web_deinit() void {
     if (web_app) |*wa| {
         wa.app.deinit();
-        wa.buf.deinit();
+        wa.cell_renderer.deinit();
     }
     web_app = null;
 }
@@ -123,7 +117,7 @@ export fn one_web_deinit() void {
 /// Update terminal size (called by JS on resize)
 export fn one_web_resize(cols: u32, rows: u32) void {
     if (web_app) |*wa| {
-        wa.term.setSize(@intCast(cols), @intCast(rows));
+        wa.cell_renderer.resize(@intCast(cols), @intCast(rows)) catch {};
         wa.app.onResize();
     }
 }
@@ -224,6 +218,89 @@ export fn one_web_reset() void {
 }
 
 // ============================================================================
+// Exported API: Cell Grid Access
+// ============================================================================
+
+/// Get pointer to cell grid (for JS to read directly from WASM memory)
+export fn one_web_get_cells_ptr() usize {
+    if (web_app) |*wa| {
+        return @intFromPtr(wa.cell_renderer.getCellsPtr());
+    }
+    return 0;
+}
+
+/// Get size of cell grid in bytes
+export fn one_web_get_cells_size() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.getCellsSize());
+    }
+    return 0;
+}
+
+/// Get grid width in cells
+export fn one_web_get_grid_width() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.width);
+    }
+    return 0;
+}
+
+/// Get grid height in cells
+export fn one_web_get_grid_height() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.height);
+    }
+    return 0;
+}
+
+/// Check if grid needs redraw
+export fn one_web_is_dirty() bool {
+    if (web_app) |*wa| {
+        return wa.cell_renderer.isDirty();
+    }
+    return false;
+}
+
+/// Get dirty region: x
+export fn one_web_get_dirty_x() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.getDirtyRegion().x);
+    }
+    return 0;
+}
+
+/// Get dirty region: y
+export fn one_web_get_dirty_y() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.getDirtyRegion().y);
+    }
+    return 0;
+}
+
+/// Get dirty region: width
+export fn one_web_get_dirty_w() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.getDirtyRegion().w);
+    }
+    return 0;
+}
+
+/// Get dirty region: height
+export fn one_web_get_dirty_h() u32 {
+    if (web_app) |*wa| {
+        return @intCast(wa.cell_renderer.getDirtyRegion().h);
+    }
+    return 0;
+}
+
+/// Clear dirty flag after rendering
+export fn one_web_clear_dirty() void {
+    if (web_app) |*wa| {
+        wa.cell_renderer.clearDirty();
+    }
+}
+
+// ============================================================================
 // Internal Implementation
 // ============================================================================
 
@@ -240,6 +317,7 @@ fn tickImpl(wa: *WebApp) void {
 
     // Render if needed
     if (wa.app.shouldRender(now)) {
-        wa.app.render(&wa.buf, &wa.term);
+        const r = wa.cell_renderer.renderer();
+        wa.app.render(r);
     }
 }
