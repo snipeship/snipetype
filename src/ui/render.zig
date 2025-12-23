@@ -18,19 +18,15 @@ const C_BG_GREEN = ansi.C_BG_GREEN;
 const C_BG_RED = ansi.C_BG_RED;
 const C_BG_VISUAL = ansi.C_BG_VISUAL;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SIMPLE MODE RENDERER (words, sentences, code)
-// ═══════════════════════════════════════════════════════════════════════════════
+// Render (words/sentences/code)
 
 pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
     const cx = term.width / 2;
     const cy = term.height / 2;
 
-    // Header
     buf.moveTo(cx -| 1, 1);
     buf.write(BOLD ++ C_INDIGO ++ "ONE" ++ RESET);
 
-    // Mode line
     buf.moveTo(cx -| 10, 2);
     buf.write(C_DIM);
     buf.write(t.config.mode.name());
@@ -121,33 +117,26 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
         }
     }
 
-    // Results
     if (t.state == .finished) {
         renderResults(buf, term, t, cy);
     }
 
-    // Footer
     renderFooter(buf, term, t);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIM MODE RENDERER (multi-line with visual mode support)
-// ═══════════════════════════════════════════════════════════════════════════════
+// Render (vim mode)
 
 pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
     const cx = term.width / 2;
     const target_lines = t.target_lines.items;
     const vim = &t.vim;
 
-    // Calculate vertical centering
     const total_lines = @max(target_lines.len, vim.buffer.lineCount());
     const start_y = (term.height -| total_lines -| 6) / 2 + 3;
 
-    // Header
     buf.moveTo(cx -| 1, 1);
     buf.write(BOLD ++ C_INDIGO ++ "ONE" ++ RESET);
 
-    // Mode line with vim mode indicator
     buf.moveTo(0, 2);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, 2);
@@ -290,18 +279,14 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         }
     }
 
-    // Results
     if (t.state == .finished) {
         renderResults(buf, term, t, start_y + max_display_lines + 1);
     }
 
-    // Footer
     renderFooter(buf, term, t);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SHARED RENDER HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
+// Helpers
 
 fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, y: usize) void {
     const cx = term.width / 2;
