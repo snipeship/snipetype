@@ -91,6 +91,9 @@ pub fn main() !void {
     var test_state = try one.TypingTest.init(allocator, seed, config);
     defer test_state.deinit();
 
+    var dirty: bool = true;
+    var needs_full_clear: bool = true;
+    var last_state: one.TestState = test_state.state;
     var last_render: i64 = 0;
 
     while (true) {
@@ -100,6 +103,7 @@ pub fn main() !void {
         while (one.readKey()) |key| {
             switch (key) {
                 0x03 => { // Ctrl+C always quits
+                    buf.clear();
                     buf.write(CLEAR ++ SHOW_CURSOR);
                     buf.flush();
                     return;
@@ -107,7 +111,9 @@ pub fn main() !void {
                 0x1b => { // Escape
                     if (test_state.config.mode == .vim) {
                         test_state.handleKey(27);
+                        dirty = true;
                     } else {
+                        buf.clear();
                         buf.write(CLEAR ++ SHOW_CURSOR);
                         buf.flush();
                         return;
@@ -116,21 +122,42 @@ pub fn main() !void {
                 '\t' => {
                     seed = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
                     try test_state.reset(seed);
+                    dirty = true;
+                    needs_full_clear = true;
+                    last_state = test_state.state;
                 },
-                else => test_state.handleKey(key),
+                else => {
+                    test_state.handleKey(key);
+                    dirty = true;
+                },
             }
         }
 
         test_state.checkTimeLimit();
+        if (test_state.state != last_state) {
+            last_state = test_state.state;
+            dirty = true;
+        }
 
-        // Render at 30fps
-        if (now - last_render >= 33) {
+        // Render on change, plus a small timer refresh while typing.
+        const timer_refresh_ms: i64 = 100;
+        if (dirty or (test_state.state == .typing and now - last_render >= timer_refresh_ms)) {
             last_render = now;
+            dirty = false;
+
+            buf.clear();
+            buf.write(SYNC_BEGIN);
+            if (needs_full_clear) {
+                buf.write(CLEAR);
+                needs_full_clear = false;
+            }
             if (test_state.config.mode == .vim) {
                 renderVim(&buf, &term, &test_state);
             } else {
                 renderSimple(&buf, &term, &test_state);
             }
+            buf.write(SYNC_END);
+            buf.flush();
         }
 
         std.Thread.sleep(2_000_000); // 2ms
