@@ -66,7 +66,11 @@ pub const App = struct {
 
     /// Reset the test with a new seed
     pub fn reset(self: *App, seed: u64) void {
-        self.test_state.reset(seed) catch {};
+        self.error_msg = null; // Clear any previous error
+        self.test_state.reset(seed) catch {
+            self.error_msg = "Failed to reset - out of memory";
+            // Keep the current state usable
+        };
         self.needs_full_clear = true;
         self.last_state = self.test_state.state;
         self.dirty = true;
@@ -75,6 +79,9 @@ pub const App = struct {
     /// Handle a key event. Returns KeyResult indicating what happened.
     /// For native CLI, quit=true means exit. For web, quit is ignored.
     pub fn handleKey(self: *App, key: Key, is_web: bool) KeyResult {
+        // Clear error on any key press
+        self.error_msg = null;
+
         // Handle settings overlay first
         if (self.settings_ui.is_open) {
             const action = self.settings_ui.handleKey(key);
