@@ -1414,29 +1414,59 @@ pub const TypingTest = struct {
     pub fn handleKey(self: *TypingTest, key: u8) void {
         if (self.state == .finished) return;
 
-        // Start timer on first printable keypress
-        if (self.state == .waiting and key >= 32 and key < 127) {
-            self.state = .typing;
-            self.start_time = std.time.milliTimestamp();
+        // Start timer on first input
+        if (self.state == .waiting) {
+            if (self.config.mode == .vim) {
+                // In vim mode, start on any key
+                self.state = .typing;
+                self.start_time = std.time.milliTimestamp();
+            } else if (key >= 32 and key < 127) {
+                self.state = .typing;
+                self.start_time = std.time.milliTimestamp();
+            }
         }
 
         if (self.state != .typing) return;
 
-        if (key == 127 or key == 8) {
-            // Backspace
-            if (self.typed.items.len > 0) {
-                _ = self.typed.pop();
-            }
-        } else if (key >= 32 and key < 127) {
-            // Printable character
-            self.typed.append(self.allocator, key) catch return;
+        if (self.config.mode == .vim) {
+            self.vim.handleKey(key);
+            self.checkVimCompletion();
+        } else {
+            self.handleNormalKey(key);
+        }
+    }
 
-            // Check if finished
-            if (self.typed.items.len >= self.target.len) {
-                self.state = .finished;
-                self.end_time = std.time.milliTimestamp();
-                self.calculateStats();
+    fn handleNormalKey(self: *TypingTest, key: u8) void {
+        if (key == 127 or key == 8) {
+            if (self.typed.items.len > 0) _ = self.typed.pop();
+        } else if (key >= 32 and key < 127) {
+            self.typed.append(self.allocator, key) catch return;
+            if (self.typed.items.len >= self.target_text.len) {
+                self.finishTest();
             }
+        }
+    }
+
+    fn checkVimCompletion(self: *TypingTest) void {
+        // Get current buffer text and compare to target
+        const typed = self.vim.buffer.toText(self.allocator);
+        defer self.allocator.free(typed);
+
+        if (std.mem.eql(u8, typed, self.target_text)) {
+            self.finishTest();
+        }
+    }
+
+    fn finishTest(self: *TypingTest) void {
+        self.state = .finished;
+        self.end_time = std.time.milliTimestamp();
+        self.calculateStats();
+    }
+
+    pub fn checkTimeLimit(self: *TypingTest) void {
+        if (self.config.time_limit == 0 or self.state != .typing) return;
+        if (self.getElapsedSeconds() >= @as(f64, @floatFromInt(self.config.time_limit))) {
+            self.finishTest();
         }
     }
 
@@ -1444,29 +1474,33 @@ pub const TypingTest = struct {
         self.correct_chars = 0;
         self.errors = 0;
 
-        const len = @min(self.typed.items.len, self.target.len);
+        const typed = if (self.config.mode == .vim)
+            self.vim.buffer.toText(self.allocator)
+        else
+            self.allocator.dupe(u8, self.typed.items) catch return;
+        defer self.allocator.free(typed);
+
+        const len = @min(typed.len, self.target_text.len);
         for (0..len) |i| {
-            if (self.typed.items[i] == self.target[i]) {
+            if (typed[i] == self.target_text[i]) {
                 self.correct_chars += 1;
             } else {
                 self.errors += 1;
             }
         }
-
-        if (self.typed.items.len > self.target.len) {
-            self.errors += self.typed.items.len - self.target.len;
+        if (typed.len > self.target_text.len) {
+            self.errors += typed.len - self.target_text.len;
+        } else if (typed.len < self.target_text.len) {
+            self.errors += self.target_text.len - typed.len;
         }
     }
 
     pub fn getWPM(self: *const TypingTest) f64 {
         const start = self.start_time orelse return 0;
         const end = self.end_time orelse return 0;
-        const elapsed_ms = end - start;
-        if (elapsed_ms <= 0) return 0;
-
-        const elapsed_min = @as(f64, @floatFromInt(elapsed_ms)) / 60000.0;
-        const word_count = @as(f64, @floatFromInt(self.correct_chars)) / 5.0;
-        return word_count / elapsed_min;
+        const ms = end - start;
+        if (ms <= 0) return 0;
+        return @as(f64, @floatFromInt(self.correct_chars)) / 5.0 / (@as(f64, @floatFromInt(ms)) / 60000.0);
     }
 
     pub fn getAccuracy(self: *const TypingTest) f64 {
@@ -1478,48 +1512,178 @@ pub const TypingTest = struct {
     pub fn getElapsedSeconds(self: *const TypingTest) f64 {
         const start = self.start_time orelse return 0;
         const end = self.end_time orelse std.time.milliTimestamp();
-        const elapsed = end - start;
-        if (elapsed < 0) return 0;
-        return @as(f64, @floatFromInt(elapsed)) / 1000.0;
+        const ms = end - start;
+        return if (ms > 0) @as(f64, @floatFromInt(ms)) / 1000.0 else 0;
+    }
+
+    pub fn getRemainingSeconds(self: *const TypingTest) f64 {
+        if (self.config.time_limit == 0) return 0;
+        return @max(0, @as(f64, @floatFromInt(self.config.time_limit)) - self.getElapsedSeconds());
     }
 
     pub fn getLiveWPM(self: *const TypingTest) f64 {
         if (self.state != .typing) return 0;
         const start = self.start_time orelse return 0;
-        const now = std.time.milliTimestamp();
-        const elapsed_ms = now - start;
-        if (elapsed_ms <= 0) return 0;
+        const ms = std.time.milliTimestamp() - start;
+        if (ms < 1000) return 0;
 
-        // Count correct chars so far
+        const typed = if (self.config.mode == .vim)
+            self.vim.buffer.toText(self.allocator)
+        else
+            self.allocator.dupe(u8, self.typed.items) catch return 0;
+        defer self.allocator.free(typed);
+
         var correct: usize = 0;
-        const len = @min(self.typed.items.len, self.target.len);
+        const len = @min(typed.len, self.target_text.len);
         for (0..len) |i| {
-            if (self.typed.items[i] == self.target[i]) {
-                correct += 1;
-            }
+            if (typed[i] == self.target_text[i]) correct += 1;
         }
-
-        const elapsed_min = @as(f64, @floatFromInt(elapsed_ms)) / 60000.0;
-        const word_count = @as(f64, @floatFromInt(correct)) / 5.0;
-        return word_count / elapsed_min;
+        return @as(f64, @floatFromInt(correct)) / 5.0 / (@as(f64, @floatFromInt(ms)) / 60000.0);
     }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TARGET GENERATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn generateTarget(rng: *Rng, allocator: std.mem.Allocator, config: Config) []u8 {
+    return switch (config.mode) {
+        .words => genWords(rng, allocator, config.word_count),
+        .sentences => genSentences(rng, allocator, config.word_count),
+        .code => genCode(rng, allocator, config.word_count, config.lang),
+        .vim => genVimSnippet(rng, allocator, config.lang),
+    };
+}
+
+fn genWords(rng: *Rng, allocator: std.mem.Allocator, count: usize) []u8 {
+    const n = @min(count, 50);
+    var len: usize = 0;
+    var sel: [50][]const u8 = undefined;
+    for (0..n) |i| {
+        sel[i] = common_words[rng.range(common_words.len)];
+        len += sel[i].len;
+    }
+    const buf = allocator.alloc(u8, len + n - 1) catch return &[_]u8{};
+    var pos: usize = 0;
+    for (0..n) |i| {
+        @memcpy(buf[pos..][0..sel[i].len], sel[i]);
+        pos += sel[i].len;
+        if (i < n - 1) {
+            buf[pos] = ' ';
+            pos += 1;
+        }
+    }
+    return buf;
+}
+
+fn genSentences(rng: *Rng, allocator: std.mem.Allocator, word_target: usize) []u8 {
+    var len: usize = 0;
+    var sel: [10][]const u8 = undefined;
+    var cnt: usize = 0;
+    var words: usize = 0;
+    while (words < word_target and cnt < 10) {
+        sel[cnt] = sentences[rng.range(sentences.len)];
+        len += sel[cnt].len + 1;
+        for (sel[cnt]) |c| if (c == ' ') {
+            words += 1;
+        };
+        words += 1;
+        cnt += 1;
+    }
+    if (cnt == 0) return &[_]u8{};
+    const buf = allocator.alloc(u8, len - 1) catch return &[_]u8{};
+    var pos: usize = 0;
+    for (0..cnt) |i| {
+        @memcpy(buf[pos..][0..sel[i].len], sel[i]);
+        pos += sel[i].len;
+        if (i < cnt - 1) {
+            buf[pos] = ' ';
+            pos += 1;
+        }
+    }
+    return buf;
+}
+
+fn genCode(rng: *Rng, allocator: std.mem.Allocator, count: usize, lang: Lang) []u8 {
+    const banks = [_][]const []const u8{ &code_zig, &code_rust, &code_go, &code_ts, &code_python, &code_c };
+    const bank: []const []const u8 = switch (lang) {
+        .zig => &code_zig,
+        .rust => &code_rust,
+        .go => &code_go,
+        .typescript => &code_ts,
+        .python => &code_python,
+        .c => &code_c,
+        .mixed => banks[rng.range(banks.len)],
+    };
+
+    const n = @min(count, 20);
+    var len: usize = 0;
+    var sel: [20][]const u8 = undefined;
+    for (0..n) |i| {
+        sel[i] = bank[rng.range(bank.len)];
+        len += sel[i].len;
+    }
+    const buf = allocator.alloc(u8, len + n - 1) catch return &[_]u8{};
+    var pos: usize = 0;
+    for (0..n) |i| {
+        @memcpy(buf[pos..][0..sel[i].len], sel[i]);
+        pos += sel[i].len;
+        if (i < n - 1) {
+            buf[pos] = ' ';
+            pos += 1;
+        }
+    }
+    return buf;
+}
+
+fn genVimSnippet(rng: *Rng, allocator: std.mem.Allocator, lang: Lang) []u8 {
+    const all_snippets = [_][]const []const u8{
+        &vim_snippets_zig,
+        &vim_snippets_rust,
+        &vim_snippets_go,
+        &vim_snippets_ts,
+        &vim_snippets_python,
+        &vim_snippets_c,
+    };
+
+    const bank: []const []const u8 = switch (lang) {
+        .zig => &vim_snippets_zig,
+        .rust => &vim_snippets_rust,
+        .go => &vim_snippets_go,
+        .typescript => &vim_snippets_ts,
+        .python => &vim_snippets_python,
+        .c => &vim_snippets_c,
+        .mixed => all_snippets[rng.range(all_snippets.len)],
+    };
+
+    const snippet = bank[rng.range(bank.len)];
+    const buf = allocator.dupe(u8, snippet) catch return &[_]u8{};
+    return buf;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TESTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test "Rng produces different values" {
-    var rng = Rng.init(12345);
-    const a = rng.next();
-    const b = rng.next();
-    try std.testing.expect(a != b);
+test "buffer basic" {
+    const allocator = std.testing.allocator;
+    var buf = Buffer.init(allocator);
+    defer buf.deinit();
+
+    buf.insertChar(.{ .row = 0, .col = 0 }, 'a');
+    try std.testing.expectEqualStrings("a", buf.getLine(0));
 }
 
-test "TypingTest initialization" {
-    var test_instance = try TypingTest.init(std.testing.allocator, 42);
-    defer test_instance.deinit();
+test "vim editor" {
+    const allocator = std.testing.allocator;
+    var vim = VimEditor.init(allocator);
+    defer vim.deinit();
 
-    try std.testing.expect(test_instance.target.len > 0);
-    try std.testing.expectEqual(TestState.waiting, test_instance.state);
+    vim.handleKey('i'); // Enter insert
+    vim.handleKey('h');
+    vim.handleKey('e');
+    vim.handleKey('l');
+    vim.handleKey('l');
+    vim.handleKey('o');
+    try std.testing.expectEqualStrings("hello", vim.buffer.getLine(0));
 }
