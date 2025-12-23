@@ -1,34 +1,25 @@
 const one = @import("one");
 const ansi = @import("ansi.zig");
+const theme_mod = @import("theme.zig");
 
-const RESET = ansi.RESET;
 const BOLD = ansi.BOLD;
 const CLEAR_LINE = ansi.CLEAR_LINE;
-const C_INDIGO = ansi.C_INDIGO;
-const C_GREEN = ansi.C_GREEN;
-const C_RED = ansi.C_RED;
-const C_YELLOW = ansi.C_YELLOW;
-const C_ORANGE = ansi.C_ORANGE;
-const C_CYAN = ansi.C_CYAN;
-const C_DIM = ansi.C_DIM;
-const C_DIMMER = ansi.C_DIMMER;
-const C_WHITE = ansi.C_WHITE;
-const C_BG_INDIGO = ansi.C_BG_INDIGO;
-const C_BG_GREEN = ansi.C_BG_GREEN;
-const C_BG_RED = ansi.C_BG_RED;
-const C_BG_VISUAL = ansi.C_BG_VISUAL;
 
 // Render (words/sentences/code)
 
-pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
+pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
     const cy = term.height / 2;
+    const base = theme.base;
 
     buf.moveTo(cx -| 1, 1);
-    buf.write(BOLD ++ C_INDIGO ++ "ONE" ++ RESET);
+    buf.write(BOLD);
+    buf.write(theme.accent);
+    buf.write("ONE");
+    buf.write(base);
 
     buf.moveTo(cx -| 10, 2);
-    buf.write(C_DIM);
+    buf.write(theme.dim);
     buf.write(t.config.mode.name());
     if (t.config.mode == .code) {
         buf.write(" · ");
@@ -37,13 +28,13 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
     if (t.config.time_limit > 0) {
         buf.print(" · {d}s", .{t.config.time_limit});
     }
-    buf.write(RESET);
+    buf.write(base);
 
     buf.moveTo(cx -| 20, 4);
-    buf.write(C_DIMMER);
+    buf.write(theme.dimmer);
     var i: usize = 0;
     while (i < 40) : (i += 1) buf.write("─");
-    buf.write(RESET);
+    buf.write(base);
 
     buf.moveTo(0, cy -| 2);
     buf.write(CLEAR_LINE);
@@ -51,35 +42,52 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
 
     switch (t.state) {
         .waiting => {
-            buf.write(C_DIM ++ "start typing..." ++ RESET);
+            buf.write(theme.dim);
+            buf.write("start typing...");
+            buf.write(base);
         },
         .typing => {
             if (t.config.time_limit > 0) {
                 const rem = t.getRemainingSeconds();
-                if (rem <= 5) buf.write(C_RED ++ BOLD) else if (rem <= 10) buf.write(C_ORANGE) else buf.write(C_DIM);
+                if (rem <= 5) {
+                    buf.write(theme.danger);
+                    buf.write(BOLD);
+                } else if (rem <= 10) {
+                    buf.write(theme.extra);
+                } else {
+                    buf.write(theme.dim);
+                }
                 buf.print("{d:.1}s", .{rem});
             } else {
-                buf.write(C_DIM);
+                buf.write(theme.dim);
                 buf.print("{d:.1}s", .{t.getElapsedSeconds()});
             }
-            buf.write(RESET);
+            buf.write(base);
 
             const wpm = t.getLiveWPM();
             if (wpm > 0) {
-                buf.write("  " ++ C_INDIGO);
+                buf.write("  ");
+                buf.write(theme.accent);
                 buf.print("{d:.0}", .{wpm});
-                buf.write(RESET ++ C_DIMMER ++ " wpm" ++ RESET);
+                buf.write(base);
+                buf.write(theme.dimmer);
+                buf.write(" wpm");
+                buf.write(base);
             }
 
             if (t.target_text.len > 0) {
                 const pct = @as(f64, @floatFromInt(t.typed.items.len)) / @as(f64, @floatFromInt(t.target_text.len)) * 100;
-                buf.write("  " ++ C_DIMMER);
+                buf.write("  ");
+                buf.write(theme.dimmer);
                 buf.print("{d:.0}%", .{pct});
-                buf.write(RESET);
+                buf.write(base);
             }
         },
         .finished => {
-            buf.write(C_GREEN ++ BOLD ++ "complete!" ++ RESET);
+            buf.write(theme.success);
+            buf.write(BOLD);
+            buf.write("complete!");
+            buf.write(base);
         },
     }
 
@@ -97,62 +105,90 @@ pub fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingT
     for (0..target.len) |idx| {
         if (idx < typed.len) {
             if (typed[idx] == target[idx]) {
-                buf.write(C_GREEN);
+                buf.write(theme.success);
             } else {
-                buf.write(C_BG_RED ++ C_RED);
+                buf.write(theme.error_bg);
+                buf.write(theme.danger);
             }
             buf.writeByte(typed[idx]);
-            buf.write(RESET);
+            buf.write(base);
         } else if (idx == typed.len) {
-            buf.write(C_BG_INDIGO ++ C_WHITE);
+            buf.write(theme.cursor_bg);
+            buf.write(theme.cursor_fg);
             buf.writeByte(target[idx]);
-            buf.write(RESET);
+            buf.write(base);
         } else {
-            buf.write(C_DIM);
+            buf.write(theme.dim);
             buf.writeByte(target[idx]);
-            buf.write(RESET);
+            buf.write(base);
         }
     }
 
     if (t.state == .finished) {
-        renderResults(buf, term, t, cy);
+        renderResults(buf, term, t, theme, cy);
     }
 
-    renderFooter(buf, term, t);
+    renderFooter(buf, term, t, theme);
 }
 
 // Render (vim mode)
 
-pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
+pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
     const target_lines = t.target_lines.items;
     const vim = &t.vim;
+    const base = theme.base;
 
     const total_lines = @max(target_lines.len, vim.buffer.lineCount());
     const start_y = (term.height -| total_lines -| 6) / 2 + 3;
 
     buf.moveTo(cx -| 1, 1);
-    buf.write(BOLD ++ C_INDIGO ++ "ONE" ++ RESET);
+    buf.write(BOLD);
+    buf.write(theme.accent);
+    buf.write("ONE");
+    buf.write(base);
 
     buf.moveTo(0, 2);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 15, 2);
-    buf.write(C_DIM ++ "vim" ++ RESET);
+    buf.write(theme.dim);
+    buf.write("vim");
+    buf.write(base);
     buf.write(" · ");
     buf.write(t.config.lang.name());
     buf.write(" · ");
 
     switch (vim.mode) {
-        .normal => buf.write(C_YELLOW ++ BOLD ++ "NORMAL" ++ RESET),
-        .insert => buf.write(C_GREEN ++ BOLD ++ "INSERT" ++ RESET),
-        .visual => buf.write(C_CYAN ++ BOLD ++ "VISUAL" ++ RESET),
-        .visual_line => buf.write(C_CYAN ++ BOLD ++ "V-LINE" ++ RESET),
+        .normal => {
+            buf.write(theme.warning);
+            buf.write(BOLD);
+            buf.write("NORMAL");
+            buf.write(base);
+        },
+        .insert => {
+            buf.write(theme.success);
+            buf.write(BOLD);
+            buf.write("INSERT");
+            buf.write(base);
+        },
+        .visual => {
+            buf.write(theme.info);
+            buf.write(BOLD);
+            buf.write("VISUAL");
+            buf.write(base);
+        },
+        .visual_line => {
+            buf.write(theme.info);
+            buf.write(BOLD);
+            buf.write("V-LINE");
+            buf.write(base);
+        },
     }
 
     if (t.config.time_limit > 0) {
-        buf.write(C_DIM);
+        buf.write(theme.dim);
         buf.print(" · {d}s", .{t.config.time_limit});
-        buf.write(RESET);
+        buf.write(base);
     }
 
     buf.moveTo(0, 3);
@@ -160,33 +196,50 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
     buf.moveTo(cx -| 15, 3);
     switch (t.state) {
         .waiting => {
-            buf.write(C_DIM ++ "press i to start typing..." ++ RESET);
+            buf.write(theme.dim);
+            buf.write("press i to start typing...");
+            buf.write(base);
         },
         .typing => {
             if (t.config.time_limit > 0) {
                 const rem = t.getRemainingSeconds();
-                if (rem <= 5) buf.write(C_RED ++ BOLD) else if (rem <= 10) buf.write(C_ORANGE) else buf.write(C_DIM);
+                if (rem <= 5) {
+                    buf.write(theme.danger);
+                    buf.write(BOLD);
+                } else if (rem <= 10) {
+                    buf.write(theme.extra);
+                } else {
+                    buf.write(theme.dim);
+                }
                 buf.print("{d:.1}s", .{rem});
             } else {
-                buf.write(C_DIM);
+                buf.write(theme.dim);
                 buf.print("{d:.1}s", .{t.getElapsedSeconds()});
             }
-            buf.write(RESET);
+            buf.write(base);
 
             const wpm = t.getLiveWPM();
             if (wpm > 0) {
-                buf.write("  " ++ C_INDIGO);
+                buf.write("  ");
+                buf.write(theme.accent);
                 buf.print("{d:.0}", .{wpm});
-                buf.write(RESET ++ C_DIMMER ++ " wpm" ++ RESET);
+                buf.write(base);
+                buf.write(theme.dimmer);
+                buf.write(" wpm");
+                buf.write(base);
             }
 
             // Cursor position
-            buf.write("  " ++ C_DIMMER);
+            buf.write("  ");
+            buf.write(theme.dimmer);
             buf.print("L{d}:C{d}", .{ vim.cursor.row + 1, vim.cursor.col + 1 });
-            buf.write(RESET);
+            buf.write(base);
         },
         .finished => {
-            buf.write(C_GREEN ++ BOLD ++ "complete!" ++ RESET);
+            buf.write(theme.success);
+            buf.write(BOLD);
+            buf.write("complete!");
+            buf.write(base);
         },
     }
 
@@ -211,9 +264,9 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
         buf.write(CLEAR_LINE);
 
         buf.moveTo(start_x -| 4, y);
-        buf.write(C_DIMMER);
+        buf.write(theme.dimmer);
         buf.print("{d:>3} ", .{row + 1});
-        buf.write(RESET);
+        buf.write(base);
 
         buf.moveTo(start_x, y);
 
@@ -229,24 +282,28 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
 
             if (is_cursor) {
                 if (vim.mode == .insert) {
-                    buf.write(C_BG_GREEN ++ C_WHITE);
+                    buf.write(theme.cursor_insert_bg);
+                    buf.write(theme.cursor_fg);
                 } else {
-                    buf.write(C_BG_INDIGO ++ C_WHITE);
+                    buf.write(theme.cursor_bg);
+                    buf.write(theme.cursor_fg);
                 }
             } else if (in_visual) {
-                buf.write(C_BG_VISUAL ++ C_WHITE);
+                buf.write(theme.visual_bg);
+                buf.write(theme.visual_fg);
             } else if (typed_char) |tc| {
                 if (target_char) |tgt| {
                     if (tc == tgt) {
-                        buf.write(C_GREEN);
+                        buf.write(theme.success);
                     } else {
-                        buf.write(C_BG_RED ++ C_RED);
+                        buf.write(theme.error_bg);
+                        buf.write(theme.danger);
                     }
                 } else {
-                    buf.write(C_ORANGE); // Extra chars
+                    buf.write(theme.extra); // Extra chars
                 }
             } else {
-                buf.write(C_DIM);
+                buf.write(theme.dim);
             }
 
             if (typed_char) |tc| {
@@ -256,78 +313,134 @@ pub fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
             } else {
                 buf.write(" ");
             }
-            buf.write(RESET);
+            buf.write(base);
         }
 
         if (vim.cursor.row == row and vim.cursor.col >= line_len) {
             if (vim.mode == .insert) {
-                buf.write(C_BG_GREEN ++ " " ++ RESET);
+                buf.write(theme.cursor_insert_bg);
+                buf.write(" ");
+                buf.write(base);
             } else {
-                buf.write(C_BG_INDIGO ++ " " ++ RESET);
+                buf.write(theme.cursor_bg);
+                buf.write(" ");
+                buf.write(base);
             }
         }
     }
 
     if (t.state == .finished) {
-        renderResults(buf, term, t, start_y + max_display_lines + 1);
+        renderResults(buf, term, t, theme, start_y + max_display_lines + 1);
     }
 
-    renderFooter(buf, term, t);
+    renderFooter(buf, term, t, theme);
 }
 
 // Helpers
 
-fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, y: usize) void {
+fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme, y: usize) void {
     const cx = term.width / 2;
     const wpm = t.getWPM();
     const acc = t.getAccuracy();
+    const base = theme.base;
 
     buf.moveTo(cx -| 10, y + 1);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 10, y + 1);
-    buf.write(BOLD ++ C_INDIGO);
+    buf.write(BOLD);
+    buf.write(theme.accent);
     buf.print("{d:.0}", .{wpm});
-    buf.write(RESET ++ C_DIM ++ " wpm  " ++ RESET);
+    buf.write(base);
+    buf.write(theme.dim);
+    buf.write(" wpm  ");
+    buf.write(base);
 
-    if (acc >= 97) buf.write(C_GREEN) else if (acc >= 90) buf.write(C_YELLOW) else buf.write(C_RED);
+    if (acc >= 97) buf.write(theme.success) else if (acc >= 90) buf.write(theme.warning) else buf.write(theme.danger);
     buf.print("{d:.1}%", .{acc});
-    buf.write(RESET ++ C_DIM ++ " acc" ++ RESET);
+    buf.write(base);
+    buf.write(theme.dim);
+    buf.write(" acc");
+    buf.write(base);
 
     buf.moveTo(cx -| 12, y + 3);
     buf.write(CLEAR_LINE);
     buf.moveTo(cx -| 12, y + 3);
-    buf.write(C_DIMMER);
+    buf.write(theme.dimmer);
     buf.print("{d:.2}s · {d}/{d} chars", .{ t.getElapsedSeconds(), t.correct_chars, t.target_text.len });
     if (t.errors > 0) {
-        buf.write(RESET ++ " · " ++ C_RED);
+        buf.write(base);
+        buf.write(" · ");
+        buf.write(theme.danger);
         buf.print("{d} errors", .{t.errors});
     }
-    buf.write(RESET);
+    buf.write(base);
 
     buf.moveTo(cx -| 7, y + 5);
-    buf.write(C_INDIGO ++ "tab" ++ RESET ++ C_DIMMER ++ " restart" ++ RESET);
+    buf.write(theme.accent);
+    buf.write("tab");
+    buf.write(base);
+    buf.write(theme.dimmer);
+    buf.write(" restart");
+    buf.write(base);
 }
 
-fn renderFooter(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
+fn renderFooter(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest, theme: *const theme_mod.Theme) void {
     const cx = term.width / 2;
+    const base = theme.base;
 
     buf.moveTo(cx -| 20, term.height -| 2);
-    buf.write(C_DIMMER);
+    buf.write(theme.dimmer);
     var i: usize = 0;
     while (i < 40) : (i += 1) buf.write("─");
-    buf.write(RESET);
+    buf.write(base);
 
     buf.moveTo(cx -| 18, term.height);
     if (t.config.mode == .vim) {
         if (t.vim.mode == .insert and t.state != .finished) {
-            buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " indent  " ++ RESET);
+            buf.write(theme.dim);
+            buf.write("tab");
+            buf.write(base);
+            buf.write(theme.dimmer);
+            buf.write(" indent  ");
+            buf.write(base);
         } else {
-            buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " new  " ++ RESET);
+            buf.write(theme.dim);
+            buf.write("tab");
+            buf.write(base);
+            buf.write(theme.dimmer);
+            buf.write(" new  ");
+            buf.write(base);
         }
-        buf.write(C_DIM ++ "esc" ++ RESET ++ C_DIMMER ++ " normal  " ++ RESET);
-        buf.write(C_DIM ++ "v/V" ++ RESET ++ C_DIMMER ++ " visual  " ++ RESET);
+        buf.write(theme.dim);
+        buf.write("esc");
+        buf.write(base);
+        buf.write(theme.dimmer);
+        buf.write(" normal  ");
+        buf.write(base);
+        buf.write(theme.dim);
+        buf.write("v/V");
+        buf.write(base);
+        buf.write(theme.dimmer);
+        buf.write(" visual  ");
+        buf.write(base);
     } else {
-        buf.write(C_DIM ++ "tab" ++ RESET ++ C_DIMMER ++ " new  " ++ RESET);
+        buf.write(theme.dim);
+        buf.write("tab");
+        buf.write(base);
+        buf.write(theme.dimmer);
+        buf.write(" new  ");
+        buf.write(base);
     }
-    buf.write(C_DIM ++ "ctrl+c" ++ RESET ++ C_DIMMER ++ " quit" ++ RESET);
+    buf.write(theme.dim);
+    buf.write("ctrl+p");
+    buf.write(base);
+    buf.write(theme.dimmer);
+    buf.write(" settings  ");
+    buf.write(base);
+    buf.write(theme.dim);
+    buf.write("ctrl+c");
+    buf.write(base);
+    buf.write(theme.dimmer);
+    buf.write(" quit");
+    buf.write(base);
 }
