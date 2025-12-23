@@ -1,3 +1,5 @@
+//! Terminal raw mode + size helpers.
+
 const std = @import("std");
 const posix = std.posix;
 
@@ -38,10 +40,3 @@ pub const Terminal = struct {
         posix.tcsetattr(posix.STDIN_FILENO, .FLUSH, self.original) catch {};
     }
 };
-
-pub fn readKey() ?u8 {
-    var buf: [1]u8 = undefined;
-    const n = posix.read(posix.STDIN_FILENO, &buf) catch return null;
-    if (n == 0) return null;
-    return buf[0];
-}

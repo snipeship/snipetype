@@ -1,3 +1,5 @@
+//! Buffered terminal output helper.
+
 const std = @import("std");
 const posix = std.posix;
 
