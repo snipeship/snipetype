@@ -311,14 +311,12 @@ fn renderResults(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest
 fn renderFooter(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
     const cx = term.width / 2;
 
-    // Bottom divider
     buf.moveTo(cx -| 20, term.height -| 2);
     buf.write(C_DIMMER);
     var i: usize = 0;
     while (i < 40) : (i += 1) buf.write("─");
     buf.write(RESET);
 
-    // Help line
     buf.moveTo(cx -| 18, term.height);
     if (t.config.mode == .vim) {
         if (t.vim.mode == .insert and t.state != .finished) {
