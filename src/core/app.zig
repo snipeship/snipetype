@@ -42,6 +42,9 @@ pub const App = struct {
     last_state: TestState,
     last_render_ms: i64,
 
+    // Error message to display (cleared on next successful operation)
+    error_msg: ?[]const u8,
+
     pub fn init(allocator: std.mem.Allocator, seed: u64, config: Config) !App {
         const test_state = try TypingTest.init(allocator, seed, config);
         return .{
@@ -53,6 +56,7 @@ pub const App = struct {
             .needs_full_clear = true,
             .last_state = test_state.state,
             .last_render_ms = 0,
+            .error_msg = null,
         };
     }
 
@@ -262,5 +266,13 @@ pub const App = struct {
     pub fn setLang(self: *App, lang: types.Lang, seed: u64) void {
         self.test_state.config.lang = lang;
         self.reset(seed);
+    }
+
+    pub fn getErrorMsg(self: *const App) ?[]const u8 {
+        return self.error_msg;
+    }
+
+    pub fn clearError(self: *App) void {
+        self.error_msg = null;
     }
 };
