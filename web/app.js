@@ -150,6 +150,7 @@ class OneApp {
 
   /**
    * Prevent browser default behavior for keys we need
+   * and send modified arrow escape sequences
    */
   setupKeyboardOverrides() {
     window.addEventListener(
@@ -163,11 +164,29 @@ class OneApp {
         if (e.key === "Tab") {
           e.preventDefault();
         }
-        // Arrow keys (scroll)
+        // Arrow keys - prevent scroll and handle modifiers
         if (
           ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
         ) {
           e.preventDefault();
+
+          // For modified arrows, send escape sequences directly
+          // since some terminal emulators may not handle them
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            const dirMap = {
+              ArrowUp: "A",
+              ArrowDown: "B",
+              ArrowRight: "C",
+              ArrowLeft: "D",
+            };
+            const dir = dirMap[e.key];
+            // Modifier: 2 = Shift, 5 = Ctrl (or Cmd on Mac)
+            const mod = e.shiftKey ? "2" : "5";
+            const seq = `\x1b[1;${mod}${dir}`;
+            this.sendToWasm(seq);
+            this.wasm.one_web_tick();
+            this.syncWebTheme();
+          }
         }
       },
       { capture: true },
