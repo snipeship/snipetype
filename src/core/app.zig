@@ -7,12 +7,10 @@ const constants = @import("constants.zig");
 const types = @import("types.zig");
 const typing_test = @import("typing_test.zig");
 const time = @import("../platform/time.zig");
-const ansi = @import("../ui/ansi.zig");
 const render_ui = @import("../ui/render.zig");
 const theme_mod = @import("../ui/theme.zig");
 const settings_mod = @import("../ui/settings.zig");
-const RenderBuffer = @import("../platform/render_buffer.zig").RenderBuffer;
-const Terminal = @import("../platform/terminal.zig").Terminal;
+const Renderer = @import("../platform/renderer.zig").Renderer;
 const Input = @import("../platform/input.zig").Input;
 const Key = @import("../platform/input.zig").Key;
 
@@ -199,32 +197,29 @@ pub const App = struct {
         return false;
     }
 
-    /// Render the current state to the buffer
-    pub fn render(self: *App, buf: *RenderBuffer, term: *Terminal) void {
+    /// Render the current state using the abstract renderer
+    pub fn render(self: *App, r: Renderer) void {
         self.last_render_ms = time.milliTimestamp();
         self.dirty = false;
 
-        buf.clear();
-        buf.write(ansi.SYNC_BEGIN);
-
         const palette = theme_mod.resolve(self.theme_id);
-        buf.write(palette.base);
+        r.setDefaultColors(palette.fg, palette.bg);
+        r.resetStyle();
 
         if (self.needs_full_clear) {
-            buf.write(ansi.CLEAR);
+            r.clear();
             self.needs_full_clear = false;
         }
 
         if (self.test_state.config.mode == .vim) {
-            render_ui.renderVim(buf, term, &self.test_state, palette);
+            render_ui.renderVim(r, &self.test_state, palette);
         } else {
-            render_ui.renderSimple(buf, term, &self.test_state, palette);
+            render_ui.renderSimple(r, &self.test_state, palette);
         }
 
-        self.settings_ui.renderOverlay(buf, term, palette, self.theme_id, self.test_state.config.mode);
+        self.settings_ui.renderOverlay(r, palette, self.theme_id, self.test_state.config.mode);
 
-        buf.write(ansi.SYNC_END);
-        buf.flush();
+        r.flush();
     }
 
     /// Mark the app as needing a resize clear
