@@ -170,8 +170,6 @@ fn parseArgs(allocator: std.mem.Allocator) !one.Config {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
-    buf.clear();
-
     const cx = term.width / 2;
     const cy = term.height / 2;
 
@@ -277,8 +275,6 @@ fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest)
 
     // Footer
     renderFooter(buf, term, t);
-
-    buf.flush();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -286,8 +282,6 @@ fn renderSimple(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) void {
-    buf.clear();
-
     const cx = term.width / 2;
     const target_lines = t.target_lines.items;
     const vim = &t.vim;
@@ -446,8 +440,6 @@ fn renderVim(buf: *one.RenderBuffer, term: *one.Terminal, t: *one.TypingTest) vo
 
     // Footer
     renderFooter(buf, term, t);
-
-    buf.flush();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
