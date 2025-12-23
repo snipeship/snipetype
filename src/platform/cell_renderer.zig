@@ -142,6 +142,7 @@ pub const CellRenderer = struct {
         .getWidth = getWidth,
         .getHeight = getHeight,
         .setDefaultColors = setDefaultColors,
+        .setUseTerminalDefaults = setUseTerminalDefaults,
     };
 
     fn moveTo(ptr: *anyopaque, x: usize, y: usize) void {
@@ -246,6 +247,12 @@ pub const CellRenderer = struct {
         self.default_bg = bg;
         self.current_fg = fg;
         self.current_bg = bg;
+    }
+
+    fn setUseTerminalDefaults(ptr: *anyopaque, use_defaults: bool) void {
+        // No-op for cell renderer - web always needs explicit colors
+        _ = ptr;
+        _ = use_defaults;
     }
 
     // ========================================================================
