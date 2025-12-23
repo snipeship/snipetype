@@ -3,6 +3,7 @@ pub const RESET = "\x1b[0m";
 pub const BOLD = "\x1b[1m";
 pub const DIM = "\x1b[2m";
 pub const UNDERLINE = "\x1b[4m";
+pub const REVERSE = "\x1b[7m";
 pub const HIDE_CURSOR = "\x1b[?25l";
 pub const SHOW_CURSOR = "\x1b[?25h";
 pub const CLEAR = "\x1b[2J\x1b[H";
