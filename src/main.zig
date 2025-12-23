@@ -15,6 +15,8 @@ const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
 const CLEAR = "\x1b[2J\x1b[H";
 const CLEAR_LINE = "\x1b[2K";
+const SYNC_BEGIN = "\x1b[?2026h";
+const SYNC_END = "\x1b[?2026l";
 
 // Colors
 const C_INDIGO = "\x1b[38;2;99;102;241m";
