@@ -97,6 +97,37 @@ const WasmInput = struct {
             return .{ .Byte = first };
         };
 
+        // Check for modified arrow sequences: \x1b[1;{mod}{dir}
+        if (third == '1') {
+            const fourth = self.readByte() orelse {
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            };
+            if (fourth == ';') {
+                const modifier = self.readByte() orelse {
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                const direction = self.readByte() orelse {
+                    self.unreadByte(modifier);
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                return parseModifiedArrow(modifier, direction);
+            } else {
+                self.unreadByte(fourth);
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            }
+        }
+
+        // Plain arrow keys
         return switch (third) {
             'A' => .ArrowUp,
             'B' => .ArrowDown,
@@ -179,6 +210,37 @@ const NativeInput = struct {
             return .{ .Byte = first };
         };
 
+        // Check for modified arrow sequences: \x1b[1;{mod}{dir}
+        if (third == '1') {
+            const fourth = self.readByte() orelse {
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            };
+            if (fourth == ';') {
+                const modifier = self.readByte() orelse {
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                const direction = self.readByte() orelse {
+                    self.unreadByte(modifier);
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                return parseModifiedArrow(modifier, direction);
+            } else {
+                self.unreadByte(fourth);
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            }
+        }
+
+        // Plain arrow keys
         return switch (third) {
             'A' => .ArrowUp,
             'B' => .ArrowDown,
