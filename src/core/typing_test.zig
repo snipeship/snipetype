@@ -136,11 +136,8 @@ pub const TypingTest = struct {
     }
 
     fn checkVimCompletion(self: *TypingTest) void {
-        // Get current buffer text and compare to target
-        const typed = self.vim.buffer.toText(self.allocator) catch return;
-        defer self.allocator.free(typed);
-
-        if (std.mem.eql(u8, typed, self.target_text)) {
+        // Allocation-free comparison using target_lines
+        if (self.vim.buffer.matchesTarget(self.target_lines.items, self.target_text.len)) {
             self.finishTest();
         }
     }
@@ -199,13 +196,16 @@ pub const TypingTest = struct {
         const ms = time.milliTimestamp() - start;
         if (ms < constants.MIN_WPM_MS) return 0;
 
-        const typed = if (self.config.mode == .vim)
-            self.vim.buffer.toText(self.allocator) catch return 0
-        else
-            self.allocator.dupe(u8, self.typed.items) catch return 0;
-        defer self.allocator.free(typed);
+        // Allocation-free character counting
+        const correct_chars = if (self.config.mode == .vim) blk: {
+            const result = self.vim.buffer.countMatchingChars(self.target_lines.items);
+            break :blk result.correct;
+        } else blk: {
+            // For non-vim mode, compare directly without allocation
+            const stats = metrics.compareTypedToTarget(self.typed.items, self.target_text);
+            break :blk stats.correct_chars;
+        };
 
-        const stats = metrics.compareTypedToTarget(typed, self.target_text);
-        return metrics.wpm(stats.correct_chars, ms);
+        return metrics.wpm(correct_chars, ms);
     }
 };
