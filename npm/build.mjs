@@ -26,7 +26,7 @@ for (const { zig, npm, ext } of TARGETS) {
       stdio: "inherit",
     });
 
-    const src = join(root, "zig-out", "bin", `one${ext}`);
+    const src = join(root, "zig-out", "bin", `snipetype${ext}`);
     const destDir = join(__dirname, npm, "bin");
     const dest = join(destDir, `snipetype${ext}`);
 

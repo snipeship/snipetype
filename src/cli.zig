@@ -1,10 +1,10 @@
 const std = @import("std");
-const one = @import("one");
+const snipetype = @import("snipetype");
 
 pub const HELP =
-    \\ONE - Typing Speed Test with Vim Editor
+    \\snipetype - Terminal Typing Test with Vim Mode
     \\
-    \\USAGE: one [OPTIONS]
+    \\USAGE: snipetype [OPTIONS]
     \\
     \\OPTIONS:
     \\  -m, --mode <MODE>   words | sentences | code | vim
@@ -24,17 +24,17 @@ pub const HELP =
     \\  Other:      p P J r
     \\
     \\EXAMPLES:
-    \\  one                      10 random words
-    \\  one -m sentences         Coherent sentences
-    \\  one -m code -l rust      Rust code snippets
-    \\  one -m vim               Multi-line vim editing
-    \\  one -m vim -l zig        Zig code in vim mode
-    \\  one -t 60                60 second challenge
+    \\  snipetype                      10 random words
+    \\  snipetype -m sentences         Coherent sentences
+    \\  snipetype -m code -l rust      Rust code snippets
+    \\  snipetype -m vim               Multi-line vim editing
+    \\  snipetype -m vim -l zig        Zig code in vim mode
+    \\  snipetype -t 60                60 second challenge
     \\
 ;
 
-pub fn parseArgs(allocator: std.mem.Allocator) !one.Config {
-    var cfg = one.Config{};
+pub fn parseArgs(allocator: std.mem.Allocator) !snipetype.Config {
+    var cfg = snipetype.Config{};
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
@@ -45,7 +45,7 @@ pub fn parseArgs(allocator: std.mem.Allocator) !one.Config {
             return error.HelpRequested;
         } else if ((std.mem.eql(u8, a, "-m") or std.mem.eql(u8, a, "--mode")) and i + 1 < args.len) {
             i += 1;
-            cfg.mode = one.Mode.fromString(args[i]) orelse return error.InvalidArg;
+            cfg.mode = snipetype.Mode.fromString(args[i]) orelse return error.InvalidArg;
         } else if ((std.mem.eql(u8, a, "-w") or std.mem.eql(u8, a, "--words")) and i + 1 < args.len) {
             i += 1;
             cfg.word_count = std.fmt.parseInt(usize, args[i], 10) catch return error.InvalidArg;
@@ -55,7 +55,7 @@ pub fn parseArgs(allocator: std.mem.Allocator) !one.Config {
             cfg.time_limit = std.fmt.parseInt(usize, args[i], 10) catch return error.InvalidArg;
         } else if ((std.mem.eql(u8, a, "-l") or std.mem.eql(u8, a, "--lang")) and i + 1 < args.len) {
             i += 1;
-            cfg.lang = one.Lang.fromString(args[i]) orelse return error.InvalidArg;
+            cfg.lang = snipetype.Lang.fromString(args[i]) orelse return error.InvalidArg;
         }
     }
     return cfg;

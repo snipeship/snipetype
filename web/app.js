@@ -1,5 +1,5 @@
 /**
- * ONE Web - JavaScript Host Application (Canvas2D Version)
+ * snipetype Web - JavaScript Host Application (Canvas2D Version)
  *
  * Uses Canvas 2D API for crisp font rendering with JetBrains Mono.
  * Reads cell grid directly from WASM memory.
@@ -157,8 +157,8 @@ class OneApp {
     await this.loadWasm();
 
     // Initialize WASM app
-    const rc = this.wasm.one_web_init(this.cols, this.rows, randomU32());
-    if (rc !== 0) throw new Error(`one_web_init failed: ${rc}`);
+    const rc = this.wasm.snipetype_init(this.cols, this.rows, randomU32());
+    if (rc !== 0) throw new Error(`snipetype_init failed: ${rc}`);
 
     // Setup input
     this.setupInput();
@@ -270,7 +270,7 @@ class OneApp {
     const resizeObserver = new ResizeObserver(() => {
       this.calculateSize(container);
       this.term.resize(this.cols, this.rows);
-      this.wasm.one_web_resize(this.cols, this.rows);
+      this.wasm.snipetype_resize(this.cols, this.rows);
     });
     resizeObserver.observe(container);
   }
@@ -284,14 +284,14 @@ class OneApp {
       },
     };
 
-    const response = await fetch("./dist/one_web.wasm");
+    const response = await fetch("./dist/snipetype_web.wasm");
     const bytes = await response.arrayBuffer();
     const result = await WebAssembly.instantiate(bytes, imports);
 
     this.wasm = result.instance.exports;
     this.wasmMemory = this.wasm.memory;
-    this.stagingPtr = this.wasm.one_web_input_staging_ptr();
-    this.stagingCap = this.wasm.one_web_input_staging_cap();
+    this.stagingPtr = this.wasm.snipetype_input_staging_ptr();
+    this.stagingCap = this.wasm.snipetype_input_staging_cap();
   }
 
   sendToWasm(dataStr) {
@@ -306,18 +306,18 @@ class OneApp {
         chunkSize,
       );
       staging.set(bytes.subarray(offset, offset + chunkSize));
-      this.wasm.one_web_input_commit(chunkSize);
+      this.wasm.snipetype_input_commit(chunkSize);
       offset += chunkSize;
     }
   }
 
   startLoop() {
     const loop = () => {
-      this.wasm.one_web_tick();
+      this.wasm.snipetype_tick();
 
-      if (this.wasm.one_web_is_dirty()) {
+      if (this.wasm.snipetype_is_dirty()) {
         this.render();
-        this.wasm.one_web_clear_dirty();
+        this.wasm.snipetype_clear_dirty();
       }
 
       this.syncWebTheme();
@@ -327,9 +327,9 @@ class OneApp {
   }
 
   render() {
-    const ptr = this.wasm.one_web_get_cells_ptr();
-    const w = this.wasm.one_web_get_grid_width();
-    const h = this.wasm.one_web_get_grid_height();
+    const ptr = this.wasm.snipetype_get_cells_ptr();
+    const w = this.wasm.snipetype_get_grid_width();
+    const h = this.wasm.snipetype_get_grid_height();
 
     if (!ptr || !w || !h) return;
 
@@ -361,8 +361,8 @@ class OneApp {
   }
 
   syncWebTheme(force = false) {
-    if (!this.wasm?.one_web_get_theme) return;
-    const themeId = this.wasm.one_web_get_theme();
+    if (!this.wasm?.snipetype_get_theme) return;
+    const themeId = this.wasm.snipetype_get_theme();
     if (!force && themeId === this.lastThemeId) return;
     this.lastThemeId = themeId;
 
@@ -374,15 +374,15 @@ class OneApp {
   // Public API
   setMode(mode) {
     const map = { words: 0, sentences: 1, code: 2, vim: 3 };
-    this.wasm.one_web_set_mode(map[mode] ?? 0);
+    this.wasm.snipetype_set_mode(map[mode] ?? 0);
   }
 
   setWordCount(count) {
-    this.wasm.one_web_set_word_count(count);
+    this.wasm.snipetype_set_word_count(count);
   }
 
   setTimeLimit(seconds) {
-    this.wasm.one_web_set_time_limit(seconds);
+    this.wasm.snipetype_set_time_limit(seconds);
   }
 
   setLang(lang) {
@@ -395,7 +395,7 @@ class OneApp {
       python: 5,
       c: 6,
     };
-    this.wasm.one_web_set_lang(map[lang] ?? 0);
+    this.wasm.snipetype_set_lang(map[lang] ?? 0);
   }
 
   setTheme(theme) {
@@ -408,26 +408,26 @@ class OneApp {
       gruvbox_dark: 5,
       solarized_dark: 6,
     };
-    this.wasm.one_web_set_theme(map[theme] ?? 0);
+    this.wasm.snipetype_set_theme(map[theme] ?? 0);
     this.syncWebTheme(true);
   }
 
   reset() {
-    this.wasm.one_web_reset();
+    this.wasm.snipetype_reset();
   }
 
   getStats() {
     const states = ["waiting", "typing", "finished"];
     return {
-      state: states[this.wasm.one_web_get_state()] ?? "waiting",
-      wpm: this.wasm.one_web_get_wpm(),
-      accuracy: this.wasm.one_web_get_accuracy(),
+      state: states[this.wasm.snipetype_get_state()] ?? "waiting",
+      wpm: this.wasm.snipetype_get_wpm(),
+      accuracy: this.wasm.snipetype_get_accuracy(),
     };
   }
 
   destroy() {
     if (this.animationId) cancelAnimationFrame(this.animationId);
-    this.wasm.one_web_deinit();
+    this.wasm.snipetype_deinit();
   }
 }
 
@@ -449,7 +449,7 @@ async function main() {
     if (params.has("theme")) app.setTheme(params.get("theme"));
 
     window.oneApp = app;
-    console.log("ONE Web ready. Use window.oneApp for API access.");
+    console.log("snipetype Web ready. Use window.oneApp for API access.");
   } catch (err) {
     console.error("Failed to init:", err);
     document.getElementById("loading").innerHTML =

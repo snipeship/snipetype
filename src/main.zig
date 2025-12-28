@@ -1,7 +1,7 @@
-//! ONE - Typing Speed Test (Native CLI Entry Point)
+//! snipetype - Terminal Typing Test (Native CLI Entry Point)
 
 const std = @import("std");
-const one = @import("one");
+const snipetype = @import("snipetype");
 const posix = std.posix;
 const cli = @import("cli.zig");
 
@@ -19,11 +19,11 @@ pub fn main() !void {
         return;
     };
 
-    var term = try one.Terminal.init();
+    var term = try snipetype.Terminal.init();
     try term.enableRawMode();
     defer term.restore();
 
-    var ansi_renderer = one.AnsiRenderer.init(allocator, term.width, term.height);
+    var ansi_renderer = snipetype.AnsiRenderer.init(allocator, term.width, term.height);
     defer ansi_renderer.deinit();
 
     // Initial setup: clear screen and hide cursor
@@ -33,10 +33,10 @@ pub fn main() !void {
     r.flush();
 
     const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-    var app = try one.App.init(allocator, seed, config);
+    var app = try snipetype.App.init(allocator, seed, config);
     defer app.deinit();
 
-    var input = one.Input.init();
+    var input = snipetype.Input.init();
 
     while (true) {
         // Check for terminal resize

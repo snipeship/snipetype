@@ -10,12 +10,12 @@ const TypingTest = @import("../core/typing_test.zig").TypingTest;
 // Common UI Elements
 // ============================================================================
 
-/// Render the "ONE" header at top center
+/// Render the header at top center
 fn renderHeader(r: Renderer, cx: usize, theme: *const theme_mod.Theme) void {
-    r.moveTo(cx -| 1, 1);
+    r.moveTo(cx -| 4, 1);
     r.setBold(true);
     r.setFg(theme.accent);
-    r.write("ONE");
+    r.write("snipetype");
     r.resetStyle();
 }
 
