@@ -201,21 +201,21 @@ Built-in themes: `system`, `one_dark`, `one_light`, `dracula`, `nord`, `gruvbox_
 
 ```mermaid
 graph TB
-    subgraph "Main Package"
-        snipetype[snipetype]
+    subgraph Main
+        snipetype
     end
 
-    subgraph "Platform Packages"
-        darwin-arm64[@snipetype/darwin-arm64]
-        darwin-x64[@snipetype/darwin-x64]
-        linux-arm64[@snipetype/linux-arm64]
-        linux-x64[@snipetype/linux-x64]
+    subgraph Platform
+        da[darwin-arm64]
+        dx[darwin-x64]
+        la[linux-arm64]
+        lx[linux-x64]
     end
 
-    snipetype -->|optionalDependencies| darwin-arm64
-    snipetype -->|optionalDependencies| darwin-x64
-    snipetype -->|optionalDependencies| linux-arm64
-    snipetype -->|optionalDependencies| linux-x64
+    snipetype -->|optionalDep| da
+    snipetype -->|optionalDep| dx
+    snipetype -->|optionalDep| la
+    snipetype -->|optionalDep| lx
 ```
 
 The main `snipetype` package contains a JS wrapper that:
