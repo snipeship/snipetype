@@ -21,10 +21,14 @@ fn renderHeader(r: Renderer, cx: usize, theme: *const theme_mod.Theme) void {
 
 /// Render a horizontal divider line
 fn renderDivider(r: Renderer, cx: usize, y: usize, theme: *const theme_mod.Theme) void {
-    r.moveTo(cx -| 20, y);
+    const w = r.width();
+    const div_width = @min(40, w -| 4); // Leave 2 char margin on each side
+    const start_x = cx -| (div_width / 2);
+
+    r.moveTo(start_x, y);
     r.setFg(theme.dimmer);
     var i: usize = 0;
-    while (i < 40) : (i += 1) r.write("-");
+    while (i < div_width) : (i += 1) r.write("-");
     r.resetStyle();
 }
 
@@ -409,57 +413,97 @@ fn renderResults(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme, y: 
 }
 
 fn renderFooter(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    const cx = r.width() / 2;
+    const w = r.width();
+    const cx = w / 2;
 
     renderDivider(r, cx, r.height() -| 2, theme);
 
-    r.moveTo(cx -| 18, r.height());
-    if (t.config.mode == .vim) {
-        if (t.vim.mode == .insert and t.state != .finished) {
-            r.setFg(theme.dim);
-            r.write("tab");
-            r.resetStyle();
-            r.setFg(theme.dimmer);
-            r.write(" indent  ");
-            r.resetStyle();
-        } else {
-            r.setFg(theme.dim);
-            r.write("tab");
-            r.resetStyle();
-            r.setFg(theme.dimmer);
-            r.write(" new  ");
-            r.resetStyle();
-        }
+    // Clear footer line
+    r.moveTo(0, r.height());
+    r.clearLine();
+
+    // Adaptive footer based on screen width
+    const is_vim = t.config.mode == .vim;
+    const is_vim_insert = is_vim and t.vim.mode == .insert and t.state != .finished;
+
+    // Calculate content and center it
+    // Minimal: "tab  ctrl+c" (11 chars)
+    // Small: "tab new  ctrl+c quit" (20 chars)
+    // Medium: add "ctrl+p settings" (36 chars)
+    // Full vim: add "esc normal  v/V visual" (58 chars)
+
+    if (w < 30) {
+        // Minimal - just essential keys
+        r.moveTo(cx -| 5, r.height());
+        r.setFg(theme.dim);
+        r.write("tab");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        r.write("  ");
+        r.setFg(theme.dim);
+        r.write("ctrl+c");
+        r.resetStyle();
+    } else if (w < 50) {
+        // Small screen
+        r.moveTo(cx -| 10, r.height());
+        r.setFg(theme.dim);
+        r.write("tab");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
+        r.setFg(theme.dim);
+        r.write("ctrl+c");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        r.write(" quit");
+        r.resetStyle();
+    } else if (w < 70 or !is_vim) {
+        // Medium screen or non-vim mode
+        r.moveTo(cx -| 18, r.height());
+        r.setFg(theme.dim);
+        r.write("tab");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
+        r.setFg(theme.dim);
+        r.write("ctrl+p");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        r.write(" settings  ");
+        r.setFg(theme.dim);
+        r.write("ctrl+c");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        r.write(" quit");
+        r.resetStyle();
+    } else {
+        // Full vim footer
+        r.moveTo(cx -| 29, r.height());
+        r.setFg(theme.dim);
+        r.write("tab");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
         r.setFg(theme.dim);
         r.write("esc");
         r.resetStyle();
         r.setFg(theme.dimmer);
         r.write(" normal  ");
-        r.resetStyle();
         r.setFg(theme.dim);
         r.write("v/V");
         r.resetStyle();
         r.setFg(theme.dimmer);
         r.write(" visual  ");
-        r.resetStyle();
-    } else {
         r.setFg(theme.dim);
-        r.write("tab");
+        r.write("ctrl+p");
         r.resetStyle();
         r.setFg(theme.dimmer);
-        r.write(" new  ");
+        r.write(" settings  ");
+        r.setFg(theme.dim);
+        r.write("ctrl+c");
+        r.resetStyle();
+        r.setFg(theme.dimmer);
+        r.write(" quit");
         r.resetStyle();
     }
-    r.setFg(theme.dim);
-    r.write("ctrl+p");
-    r.resetStyle();
-    r.setFg(theme.dimmer);
-    r.write(" settings  ");
-    r.resetStyle();
-    r.setFg(theme.dim);
-    r.write("ctrl+c");
-    r.resetStyle();
-    r.setFg(theme.dimmer);
-    r.write(" quit");
-    r.resetStyle();
 }
