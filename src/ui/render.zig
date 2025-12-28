@@ -140,7 +140,10 @@ pub fn renderSimple(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) 
 
     for (0..target.len) |idx| {
         if (idx < typed.len) {
-            if (typed[idx] == target[idx]) {
+            if (idx == t.cursor_pos) {
+                r.setBg(theme.cursor_bg);
+                r.setFg(theme.cursor_fg);
+            } else if (typed[idx] == target[idx]) {
                 r.setFg(theme.success);
             } else {
                 r.setBg(theme.error_bg);
@@ -148,7 +151,7 @@ pub fn renderSimple(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) 
             }
             r.writeByte(typed[idx]);
             r.resetStyle();
-        } else if (idx == typed.len) {
+        } else if (idx == t.cursor_pos) {
             r.setBg(theme.cursor_bg);
             r.setFg(theme.cursor_fg);
             r.writeByte(target[idx]);
@@ -535,7 +538,7 @@ fn getSimpleCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
     const start_x = if (text_len < max_w) (width -| text_len) / 2 else 2;
 
     return .{
-        .x = start_x + typed_len,
+        .x = start_x + t.cursor_pos,
         .y = cy,
     };
 }

@@ -211,7 +211,7 @@ class OneApp {
   }
 
   keyToBytes(e) {
-    const { key, ctrlKey, metaKey, shiftKey } = e;
+    const { key, ctrlKey, metaKey, shiftKey, altKey } = e;
 
     // Ctrl combinations
     if (ctrlKey || metaKey) {
@@ -226,7 +226,7 @@ class OneApp {
       case "Enter":
         return "\r";
       case "Backspace":
-        return "\x7f";
+        return altKey ? "\x1b\x7f" : "\x7f";
       case "Tab":
         return "\t";
       case "ArrowUp":
@@ -244,21 +244,25 @@ class OneApp {
       case "ArrowRight":
         return ctrlKey || metaKey
           ? "\x1b[1;5C"
-          : shiftKey
-            ? "\x1b[1;2C"
-            : "\x1b[C";
+          : altKey
+            ? "\x1b[1;3C"
+            : shiftKey
+              ? "\x1b[1;2C"
+              : "\x1b[C";
       case "ArrowLeft":
         return ctrlKey || metaKey
           ? "\x1b[1;5D"
-          : shiftKey
-            ? "\x1b[1;2D"
-            : "\x1b[D";
+          : altKey
+            ? "\x1b[1;3D"
+            : shiftKey
+              ? "\x1b[1;2D"
+              : "\x1b[D";
       case "Home":
         return "\x1b[H";
       case "End":
         return "\x1b[F";
       case "Delete":
-        return "\x1b[3~";
+        return altKey ? "\x1b[3;3~" : "\x1b[3~";
     }
 
     // Printable characters

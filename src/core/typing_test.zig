@@ -11,6 +11,7 @@ const Config = types.Config;
 
 const Rng = @import("rng.zig").Rng;
 const VimEditor = @import("../vim/editor.zig").VimEditor;
+const Key = @import("../platform/input.zig").Key;
 
 pub const TestState = enum { waiting, typing, finished };
 
@@ -126,13 +127,98 @@ pub const TypingTest = struct {
 
     fn handleNormalKey(self: *TypingTest, key: u8) void {
         if (key == 127 or key == 8) {
-            if (self.typed.items.len > 0) _ = self.typed.pop();
+            self.deleteBackward();
         } else if (key >= 32 and key < 127) {
-            self.typed.append(self.allocator, key) catch return;
-            if (self.typed.items.len >= self.target_text.len) {
-                self.finishTest();
-            }
+            self.insertByte(key);
         }
+    }
+
+    pub fn handleSimpleKey(self: *TypingTest, key: Key) void {
+        if (self.config.mode == .vim) return;
+        if (self.state == .finished) return;
+
+        switch (key) {
+            .ArrowLeft => self.moveCursorLeft(),
+            .ArrowRight => self.moveCursorRight(),
+            .AltArrowLeft => self.moveCursorWordLeft(),
+            .AltArrowRight => self.moveCursorWordRight(),
+            .Delete => self.deleteForward(),
+            .AltBackspace => self.deletePrevWord(),
+            .AltDelete => self.deleteNextWord(),
+            else => {},
+        }
+    }
+
+    fn insertByte(self: *TypingTest, byte: u8) void {
+        self.typed.insert(self.allocator, self.cursor_pos, byte) catch return;
+        self.cursor_pos += 1;
+        if (self.typed.items.len >= self.target_text.len) {
+            self.finishTest();
+        }
+    }
+
+    pub fn moveCursorLeft(self: *TypingTest) void {
+        if (self.cursor_pos > 0) self.cursor_pos -= 1;
+    }
+
+    pub fn moveCursorRight(self: *TypingTest) void {
+        if (self.cursor_pos < self.typed.items.len) self.cursor_pos += 1;
+    }
+
+    pub fn moveCursorWordLeft(self: *TypingTest) void {
+        var idx = self.cursor_pos;
+        while (idx > 0 and std.ascii.isWhitespace(self.typed.items[idx - 1])) : (idx -= 1) {}
+        while (idx > 0 and !std.ascii.isWhitespace(self.typed.items[idx - 1])) : (idx -= 1) {}
+        self.cursor_pos = idx;
+    }
+
+    pub fn moveCursorWordRight(self: *TypingTest) void {
+        const len = self.typed.items.len;
+        var idx = self.cursor_pos;
+        while (idx < len and std.ascii.isWhitespace(self.typed.items[idx])) : (idx += 1) {}
+        while (idx < len and !std.ascii.isWhitespace(self.typed.items[idx])) : (idx += 1) {}
+        self.cursor_pos = idx;
+    }
+
+    pub fn deleteBackward(self: *TypingTest) void {
+        if (self.cursor_pos == 0) return;
+        self.removeRange(self.cursor_pos - 1, self.cursor_pos);
+        self.cursor_pos -= 1;
+    }
+
+    pub fn deleteForward(self: *TypingTest) void {
+        if (self.cursor_pos >= self.typed.items.len) return;
+        self.removeRange(self.cursor_pos, self.cursor_pos + 1);
+    }
+
+    pub fn deletePrevWord(self: *TypingTest) void {
+        if (self.cursor_pos == 0) return;
+        var start = self.cursor_pos;
+        while (start > 0 and std.ascii.isWhitespace(self.typed.items[start - 1])) : (start -= 1) {}
+        while (start > 0 and !std.ascii.isWhitespace(self.typed.items[start - 1])) : (start -= 1) {}
+        if (start == self.cursor_pos) return;
+        self.removeRange(start, self.cursor_pos);
+        self.cursor_pos = start;
+    }
+
+    pub fn deleteNextWord(self: *TypingTest) void {
+        const len = self.typed.items.len;
+        var end = self.cursor_pos;
+        while (end < len and std.ascii.isWhitespace(self.typed.items[end])) : (end += 1) {}
+        while (end < len and !std.ascii.isWhitespace(self.typed.items[end])) : (end += 1) {}
+        if (end == self.cursor_pos) return;
+        self.removeRange(self.cursor_pos, end);
+    }
+
+    fn removeRange(self: *TypingTest, start: usize, end: usize) void {
+        if (start >= end or end > self.typed.items.len) return;
+        const len = self.typed.items.len;
+        const remove_len = end - start;
+        const tail_len = len - end;
+        if (tail_len > 0) {
+            std.mem.copyForwards(u8, self.typed.items[start .. start + tail_len], self.typed.items[end .. len]);
+        }
+        self.typed.items.len = len - remove_len;
     }
 
     fn checkVimCompletion(self: *TypingTest) void {

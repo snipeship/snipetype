@@ -10,13 +10,18 @@ const constants = @import("../core/constants.zig");
 const is_wasm = builtin.cpu.arch == .wasm32;
 
 /// Parse modified arrow key from escape sequence \x1b[1;{mod}{dir}
-/// modifier: '2' = Shift, '5' = Ctrl
+/// modifier: '2' = Shift, '3' = Alt, '5' = Ctrl
 /// direction: 'A' = Up, 'B' = Down, 'C' = Right, 'D' = Left
 fn parseModifiedArrow(modifier: u8, direction: u8) ?Key {
     return switch (modifier) {
         '2' => switch (direction) { // Shift
             'C' => .ShiftArrowRight,
             'D' => .ShiftArrowLeft,
+            else => null,
+        },
+        '3' => switch (direction) { // Alt
+            'C' => .AltArrowRight,
+            'D' => .AltArrowLeft,
             else => null,
         },
         '5' => switch (direction) { // Ctrl
@@ -26,6 +31,15 @@ fn parseModifiedArrow(modifier: u8, direction: u8) ?Key {
             'D' => .CtrlArrowLeft,
             else => null,
         },
+        else => null,
+    };
+}
+
+/// Parse modified delete key from escape sequence \x1b[3;{mod}~
+/// modifier: '3' = Alt
+fn parseModifiedDelete(modifier: u8) ?Key {
+    return switch (modifier) {
+        '3' => .AltDelete,
         else => null,
     };
 }
@@ -40,12 +54,19 @@ pub const Key = union(enum) {
     // Shift+Arrow (word movement)
     ShiftArrowLeft,
     ShiftArrowRight,
+    // Alt+Arrow (word movement)
+    AltArrowLeft,
+    AltArrowRight,
     // Ctrl+Arrow (word movement)
     CtrlArrowLeft,
     CtrlArrowRight,
     // Ctrl+Up/Down (document navigation)
     CtrlArrowUp,
     CtrlArrowDown,
+    // Delete keys
+    Delete,
+    AltDelete,
+    AltBackspace,
 };
 
 pub const Input = if (is_wasm) WasmInput else NativeInput;
@@ -88,8 +109,18 @@ const WasmInput = struct {
 
         const second = self.readByte() orelse return .{ .Byte = first };
         if (second != '[') {
-            self.unreadByte(second);
-            return .{ .Byte = first };
+            if (second == 0x7f or second == 0x08) {
+                return .AltBackspace;
+            }
+            return switch (second) {
+                'b', 'B' => .AltArrowLeft,
+                'f', 'F' => .AltArrowRight,
+                'd', 'D' => .AltDelete,
+                else => blk: {
+                    self.unreadByte(second);
+                    break :blk .{ .Byte = first };
+                },
+            };
         }
 
         const third = self.readByte() orelse {
@@ -125,6 +156,46 @@ const WasmInput = struct {
                 self.unreadByte(second);
                 return .{ .Byte = first };
             }
+        }
+
+        // Delete key: \x1b[3~ or \x1b[3;{mod}~
+        if (third == '3') {
+            const fourth = self.readByte() orelse {
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            };
+            if (fourth == '~') {
+                return .Delete;
+            }
+            if (fourth == ';') {
+                const modifier = self.readByte() orelse {
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                const fifth = self.readByte() orelse {
+                    self.unreadByte(modifier);
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                if (fifth == '~') {
+                    return parseModifiedDelete(modifier);
+                }
+                self.unreadByte(fifth);
+                self.unreadByte(modifier);
+                self.unreadByte(fourth);
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            }
+            self.unreadByte(fourth);
+            self.unreadByte(third);
+            self.unreadByte(second);
+            return .{ .Byte = first };
         }
 
         // Plain arrow keys
@@ -201,8 +272,18 @@ const NativeInput = struct {
 
         const second = self.readByte() orelse return .{ .Byte = first };
         if (second != '[') {
-            self.unreadByte(second);
-            return .{ .Byte = first };
+            if (second == 0x7f or second == 0x08) {
+                return .AltBackspace;
+            }
+            return switch (second) {
+                'b', 'B' => .AltArrowLeft,
+                'f', 'F' => .AltArrowRight,
+                'd', 'D' => .AltDelete,
+                else => blk: {
+                    self.unreadByte(second);
+                    break :blk .{ .Byte = first };
+                },
+            };
         }
 
         const third = self.readByte() orelse {
@@ -238,6 +319,46 @@ const NativeInput = struct {
                 self.unreadByte(second);
                 return .{ .Byte = first };
             }
+        }
+
+        // Delete key: \x1b[3~ or \x1b[3;{mod}~
+        if (third == '3') {
+            const fourth = self.readByte() orelse {
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            };
+            if (fourth == '~') {
+                return .Delete;
+            }
+            if (fourth == ';') {
+                const modifier = self.readByte() orelse {
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                const fifth = self.readByte() orelse {
+                    self.unreadByte(modifier);
+                    self.unreadByte(fourth);
+                    self.unreadByte(third);
+                    self.unreadByte(second);
+                    return .{ .Byte = first };
+                };
+                if (fifth == '~') {
+                    return parseModifiedDelete(modifier);
+                }
+                self.unreadByte(fifth);
+                self.unreadByte(modifier);
+                self.unreadByte(fourth);
+                self.unreadByte(third);
+                self.unreadByte(second);
+                return .{ .Byte = first };
+            }
+            self.unreadByte(fourth);
+            self.unreadByte(third);
+            self.unreadByte(second);
+            return .{ .Byte = first };
         }
 
         // Plain arrow keys

@@ -52,14 +52,15 @@ pub const Settings = struct {
         switch (key) {
             .ArrowUp, .CtrlArrowUp => return self.moveSelection(-1),
             .ArrowDown, .CtrlArrowDown => return self.moveSelection(1),
-            .ArrowLeft, .ShiftArrowLeft, .CtrlArrowLeft => {
+            .ArrowLeft, .ShiftArrowLeft, .CtrlArrowLeft, .AltArrowLeft => {
                 self.panel = .theme;
                 return .none;
             },
-            .ArrowRight, .ShiftArrowRight, .CtrlArrowRight => {
+            .ArrowRight, .ShiftArrowRight, .CtrlArrowRight, .AltArrowRight => {
                 self.panel = .mode;
                 return .none;
             },
+            .Delete, .AltDelete, .AltBackspace => return .none,
             .Byte => |b| switch (b) {
                 0x1b, 'q' => { // Esc / q
                     self.is_open = false;

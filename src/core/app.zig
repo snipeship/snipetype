@@ -155,13 +155,15 @@ pub const App = struct {
                     return .handled;
                 },
             },
-            // Arrow keys - route to vim mode for navigation
+            // Navigation and edit keys
             .ArrowUp,
             .ArrowDown,
             .ArrowLeft,
             .ArrowRight,
             .ShiftArrowLeft,
             .ShiftArrowRight,
+            .AltArrowLeft,
+            .AltArrowRight,
             .CtrlArrowLeft,
             .CtrlArrowRight,
             .CtrlArrowUp,
@@ -169,6 +171,19 @@ pub const App = struct {
             => {
                 if (self.test_state.config.mode == .vim) {
                     self.test_state.vim.handleArrow(key);
+                    self.dirty = true;
+                    return .handled;
+                }
+                self.test_state.handleSimpleKey(key);
+                self.dirty = true;
+                return .handled;
+            },
+            .Delete,
+            .AltDelete,
+            .AltBackspace,
+            => {
+                if (self.test_state.config.mode != .vim) {
+                    self.test_state.handleSimpleKey(key);
                     self.dirty = true;
                     return .handled;
                 }
