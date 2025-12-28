@@ -71,6 +71,12 @@ pub fn renderSimple(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) 
     const cx = r.width() / 2;
     const cy = r.height() / 2;
 
+    // Clear header and mode lines to avoid stale content
+    r.moveTo(0, 1);
+    r.clearLine();
+    r.moveTo(0, 2);
+    r.clearLine();
+
     renderHeader(r, cx, theme);
 
     r.moveTo(cx -| 10, 2);
@@ -177,10 +183,16 @@ pub fn renderVim(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) voi
         }
     }
 
-    renderHeader(r, cx, theme);
-
+    // Clear header and status lines to avoid stale content
+    r.moveTo(0, 1);
+    r.clearLine();
     r.moveTo(0, 2);
     r.clearLine();
+    r.moveTo(0, 3);
+    r.clearLine();
+
+    renderHeader(r, cx, theme);
+
     r.moveTo(cx -| 15, 2);
     r.setFg(theme.dim);
     r.write("vim");
