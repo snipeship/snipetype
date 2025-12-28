@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/snipeship/tuityper"
+    "url": "https://github.com/snipeship/snipetype"
   },
   "os": ["darwin"],
   "cpu": ["x64"],

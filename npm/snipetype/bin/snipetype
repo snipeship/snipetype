@@ -15,7 +15,7 @@ function getBinaryPath() {
 
   if (!pkg) {
     console.error(`snipetype: Unsupported platform: ${platform}`);
-    console.error("Please open an issue at https://github.com/snipeship/tuityper/issues");
+    console.error("Please open an issue at https://github.com/snipeship/snipetype/issues");
     process.exit(1);
   }
 
