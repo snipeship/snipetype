@@ -507,3 +507,62 @@ fn renderFooter(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void
         r.resetStyle();
     }
 }
+
+// ============================================================================
+// Cursor Position
+// ============================================================================
+
+pub const CursorPos = struct {
+    x: usize,
+    y: usize,
+};
+
+/// Get the screen position where the typing cursor should be
+pub fn getCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
+    if (t.config.mode == .vim) {
+        return getVimCursorPos(t, width, height);
+    } else {
+        return getSimpleCursorPos(t, width, height);
+    }
+}
+
+fn getSimpleCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
+    const cy = height / 2;
+    const target = t.target_text;
+    const typed_len = t.typed.items.len;
+    const max_w = width -| 4;
+    const text_len = @max(target.len, typed_len);
+    const start_x = if (text_len < max_w) (width -| text_len) / 2 else 2;
+
+    return .{
+        .x = start_x + typed_len,
+        .y = cy,
+    };
+}
+
+fn getVimCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
+    const target_lines = t.target_lines.items;
+    const vim = &t.vim;
+
+    const total_lines = @max(target_lines.len, vim.buffer.lineCount());
+    const start_y = (height -| total_lines -| 6) / 2 + 3;
+
+    // Calculate max line length for centering
+    var max_line_len: usize = 0;
+    for (target_lines) |line| {
+        if (line.len > max_line_len) max_line_len = line.len;
+    }
+    for (0..vim.buffer.lineCount()) |row| {
+        const line = vim.buffer.getLine(row);
+        if (line.len > max_line_len) max_line_len = line.len;
+    }
+
+    const max_w = width -| 8;
+    const display_width = @min(max_line_len + 4, max_w);
+    const start_x = (width -| display_width) / 2;
+
+    return .{
+        .x = start_x + vim.cursor.col,
+        .y = start_y + vim.cursor.row,
+    };
+}

@@ -26,8 +26,7 @@ pub fn main() !void {
     var ansi_renderer = snipetype.AnsiRenderer.init(allocator, term.width, term.height);
     defer ansi_renderer.deinit();
 
-    // Initial setup: clear screen and hide cursor
-    ansi_renderer.hideCursor();
+    // Initial setup: clear screen
     var r = ansi_renderer.renderer();
     r.clear();
     r.flush();
@@ -56,7 +55,6 @@ pub fn main() !void {
             if (key == .Byte and key.Byte == 0x03) {
                 ansi_renderer.clearBuffer();
                 r.clear();
-                ansi_renderer.showCursor();
                 r.flush();
                 return;
             }
@@ -65,7 +63,6 @@ pub fn main() !void {
             if (result == .quit) {
                 ansi_renderer.clearBuffer();
                 r.clear();
-                ansi_renderer.showCursor();
                 r.flush();
                 return;
             }
@@ -78,6 +75,11 @@ pub fn main() !void {
         if (app.shouldRender(now)) {
             ansi_renderer.beginSync();
             app.render(r);
+
+            // Position terminal cursor at typing position
+            const cursor_pos = app.getCursorPos(term.width, term.height);
+            r.moveTo(cursor_pos.x, cursor_pos.y);
+
             ansi_renderer.endSync();
             r.flush();
         }

@@ -295,4 +295,9 @@ pub const App = struct {
     pub fn clearError(self: *App) void {
         self.error_msg = null;
     }
+
+    /// Get the screen position of the typing cursor
+    pub fn getCursorPos(self: *App, width: usize, height: usize) render_ui.CursorPos {
+        return render_ui.getCursorPos(&self.test_state, width, height);
+    }
 };
