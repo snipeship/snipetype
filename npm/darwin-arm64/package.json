@@ -1,0 +1,13 @@
+{
+  "name": "@snipetype/darwin-arm64",
+  "version": "0.0.1",
+  "description": "snipetype binary for macOS ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snipeship/tuityper"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "preferUnplugged": true
+}

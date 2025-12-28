@@ -1,0 +1,22 @@
+{
+  "name": "snipetype",
+  "version": "0.0.1",
+  "description": "A terminal typing test",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snipeship/tuityper"
+  },
+  "bin": {
+    "snipetype": "bin/snipetype"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "optionalDependencies": {
+    "@snipetype/darwin-arm64": "0.0.1",
+    "@snipetype/darwin-x64": "0.0.1",
+    "@snipetype/linux-arm64": "0.0.1",
+    "@snipetype/linux-x64": "0.0.1"
+  }
+}

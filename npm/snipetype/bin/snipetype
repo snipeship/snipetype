@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+const { execFileSync } = require("child_process");
+const path = require("path");
+
+const PLATFORMS = {
+  "darwin-arm64": "@snipetype/darwin-arm64",
+  "darwin-x64": "@snipetype/darwin-x64",
+  "linux-arm64": "@snipetype/linux-arm64",
+  "linux-x64": "@snipetype/linux-x64",
+};
+
+function getBinaryPath() {
+  const platform = `${process.platform}-${process.arch}`;
+  const pkg = PLATFORMS[platform];
+
+  if (!pkg) {
+    console.error(`snipetype: Unsupported platform: ${platform}`);
+    console.error("Please open an issue at https://github.com/snipeship/tuityper/issues");
+    process.exit(1);
+  }
+
+  const bin = "snipetype";
+
+  // Try optionalDependency first
+  try {
+    return require.resolve(`${pkg}/bin/${bin}`);
+  } catch {
+    // Fallback to postinstall-downloaded binary
+    return path.join(__dirname, "..", bin);
+  }
+}
+
+try {
+  execFileSync(getBinaryPath(), process.argv.slice(2), { stdio: "inherit" });
+} catch (e) {
+  if (e.status !== undefined) {
+    process.exit(e.status);
+  }
+  throw e;
+}

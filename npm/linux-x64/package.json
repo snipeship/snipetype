@@ -1,0 +1,13 @@
+{
+  "name": "@snipetype/linux-x64",
+  "version": "0.0.1",
+  "description": "snipetype binary for Linux x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snipeship/tuityper"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "preferUnplugged": true
+}
