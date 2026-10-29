@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -57,15 +57,38 @@ for (const pkg of PACKAGES) {
   const pkgJson = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
   console.log(`Publishing ${pkgJson.name}@${version}...`);
 
-  try {
-    execSync("npm publish --access public", {
-      cwd: pkgDir,
-      stdio: "inherit",
-    });
+  // Re-running a half-finished release must not fail on packages that
+  // already went out (published, or staged and awaiting the registry).
+  if (isPublished(pkgJson.name, version)) {
+    console.log(`  ✓ ${pkgJson.name}@${version} already published, skipping\n`);
+    continue;
+  }
+
+  const res = spawnSync("npm", ["publish", "--access", "public"], {
+    cwd: pkgDir,
+    encoding: "utf8",
+  });
+  process.stdout.write(res.stdout ?? "");
+  process.stderr.write(res.stderr ?? "");
+  if (res.status === 0) {
     console.log(`  ✓ Published ${pkgJson.name}@${version}\n`);
-  } catch (e) {
+  } else if (/previously (published|staged) version/.test(res.stderr ?? "")) {
+    console.log(`  ✓ ${pkgJson.name}@${version} already on the registry, skipping\n`);
+  } else {
     console.error(`  ✗ Failed to publish ${pkgJson.name}`);
     process.exit(1);
+  }
+}
+
+function isPublished(name, version) {
+  try {
+    const out = execSync(`npm view ${name}@${version} version`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.trim() === version;
+  } catch {
+    return false;
   }
 }
 
