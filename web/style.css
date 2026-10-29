@@ -7,6 +7,8 @@
 :root {
     --one-bg: #282c34;
     --one-fg: #abb2bf;
+    --one-accent: #6366f1;
+    --chrome-font: "JetBrains Mono", ui-monospace, monospace;
 }
 
 html,
@@ -15,37 +17,275 @@ body {
     background-color: var(--one-bg);
     color: var(--one-fg);
     overflow: hidden;
+    transition: background-color 0.2s ease;
 }
 
 #app {
     height: 100%;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
     position: relative;
 }
 
+/* The play area. Its background is the theme bg, which also fills the
+   margin FitAddon leaves around the whole-cell terminal grid. */
+#screen {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    background-color: var(--one-bg);
+    transition: background-color 0.2s ease;
+}
+
+/* ghostty-web container: the terminal canvas is centered inside it and is
+   transparent wherever a cell uses the default background. */
 #terminal {
+    position: absolute;
+    inset: 12px 12px 0 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
     overflow: hidden;
-    background-color: var(--one-bg);
+    z-index: 1;
+    background: transparent;
 }
 
 #terminal canvas {
     outline: none;
-    border-radius: 4px;
+}
+
+/* Arcade pixel layer, positioned by app.js to the terminal canvas rect. */
+#fx {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    pointer-events: none;
+    display: block;
+}
+
+#fx[hidden] {
+    display: none;
+}
+
+/* Footer chrome: small and quiet. */
+#controls {
+    flex: 0 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 14px;
+    font-family: var(--chrome-font);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: var(--one-fg);
+    background-color: var(--one-bg);
+    user-select: none;
+}
+
+#controls .brand {
+    opacity: 0.55;
+    font-weight: 700;
+    /* Key hints live in the app's own footer; the sound toggle sits right. */
+    margin-right: auto;
+}
+
+#controls kbd {
+    font-family: inherit;
+}
+
+#sound-toggle,
+.chrome-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    transition:
+        opacity 0.15s ease,
+        border-color 0.15s ease;
+}
+
+#sound-toggle:hover,
+#sound-toggle:focus-visible,
+.chrome-btn:hover,
+.chrome-btn:focus-visible {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--one-fg) 30%, transparent);
+    outline: none;
+}
+
+#sound-toggle svg path,
+.chrome-btn svg path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+#sound-toggle svg .speaker {
+    fill: currentColor;
+}
+
+#sound-toggle[data-state="on"] .mute,
+#sound-toggle[data-state="off"] .waves {
+    display: none;
+}
+
+#sound-toggle[data-state="off"] .label {
+    text-decoration: line-through;
+}
+
+/* Arcade: the margins FitAddon leaves around the cell grid and the footer
+   take the scene's night color, and the footer text steps back (the sound
+   toggle stays). */
+html.arcade {
+    --arcade-night: #0b0c22;
+    --arcade-ink: #f3eee4;
+}
+
+html.arcade,
+html.arcade body,
+html.arcade #screen,
+html.arcade #controls {
+    background-color: var(--arcade-night);
+}
+
+html.arcade #controls {
+    color: var(--arcade-ink);
+}
+
+html.arcade #controls .brand {
+    visibility: hidden;
+}
+
+html.arcade #sound-toggle,
+html.arcade .chrome-btn {
+    opacity: 0.35;
+}
+
+.chrome-btn[hidden] {
+    display: none;
+}
+
+#fullscreen-toggle[data-state="on"] .enter,
+#fullscreen-toggle[data-state="off"] .exit {
+    display: none;
+}
+
+/* Smooth caret (classic simple modes): a bar the host moves over the
+   terminal canvas; the emulator's own cursor is hidden meanwhile. */
+#caret {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 2;
+    pointer-events: none;
+    background-color: var(--caret-color, var(--one-accent));
+    border-radius: 1px;
+    transition:
+        transform 80ms ease-out,
+        height 80ms ease-out;
+    will-change: transform;
+}
+
+#caret[hidden] {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #caret {
+        transition: none;
+    }
+}
+
+/* Custom text dialog. Keys typed here stay in the textarea. */
+#custom-dialog {
+    margin: auto;
+    width: min(720px, calc(100vw - 32px));
+    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--one-fg) 25%, transparent);
+    border-radius: 10px;
+    background-color: var(--one-bg);
+    color: var(--one-fg);
+    font-family: var(--chrome-font);
+    font-size: 13px;
+}
+
+#custom-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+#custom-dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#custom-dialog h2 {
+    font-size: 14px;
+    color: var(--one-accent);
+}
+
+#custom-dialog p {
+    opacity: 0.7;
+}
+
+#custom-dialog textarea {
+    width: 100%;
+    min-height: 240px;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--one-fg) 25%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--one-fg) 6%, var(--one-bg));
+    color: inherit;
+    font: inherit;
+    line-height: 1.5;
+}
+
+#custom-dialog textarea:focus {
+    outline: 1px solid var(--one-accent);
+}
+
+#custom-dialog .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+#custom-dialog button {
+    height: 28px;
+    padding: 0 14px;
+    border: 1px solid color-mix(in srgb, var(--one-fg) 30%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+#custom-dialog button[value="use"] {
+    border-color: var(--one-accent);
+    color: var(--one-accent);
+}
+
+html.arcade #sound-toggle:hover,
+html.arcade #sound-toggle:focus-visible {
+    opacity: 1;
 }
 
 #loading {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -60,14 +300,20 @@ body {
 }
 
 .loading-text {
-    color: #6366f1;
-    font-family: "JetBrains Mono", monospace;
+    color: var(--one-accent);
+    font-family: var(--chrome-font);
     font-size: 18px;
 }
 
 .loading-text::after {
     content: "";
     animation: dots 1.5s steps(4, end) infinite;
+}
+
+.loading-error {
+    color: #ef4444;
+    font-family: var(--chrome-font);
+    font-size: 16px;
 }
 
 @keyframes dots {
@@ -85,10 +331,4 @@ body {
     100% {
         content: "...";
     }
-}
-
-/* Focus outline for accessibility */
-#terminal canvas:focus {
-    outline: 2px solid #6366f1;
-    outline-offset: -2px;
 }

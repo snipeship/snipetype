@@ -4,7 +4,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const is_wasm = builtin.cpu.arch == .wasm32;
+const is_wasm = builtin.target.cpu.arch == .wasm32;
 
 pub const RenderBuffer = if (is_wasm) WasmRenderBuffer else NativeRenderBuffer;
 
@@ -16,7 +16,7 @@ const WasmRenderBuffer = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) WasmRenderBuffer {
-        return .{ .data = std.ArrayList(u8){}, .allocator = allocator };
+        return .{ .data = std.ArrayList(u8).empty, .allocator = allocator };
     }
 
     pub fn deinit(self: *WasmRenderBuffer) void {
@@ -36,7 +36,7 @@ const WasmRenderBuffer = struct {
     }
 
     pub fn print(self: *WasmRenderBuffer, comptime fmt: []const u8, args: anytype) void {
-        std.fmt.format(self.data.writer(self.allocator), fmt, args) catch {};
+        self.data.print(self.allocator, fmt, args) catch {};
     }
 
     pub fn moveTo(self: *WasmRenderBuffer, x: usize, y: usize) void {
@@ -51,13 +51,11 @@ const WasmRenderBuffer = struct {
 
 /// Native RenderBuffer - flushes to stdout
 const NativeRenderBuffer = struct {
-    const posix = std.posix;
-
     data: std.ArrayList(u8),
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) NativeRenderBuffer {
-        return .{ .data = std.ArrayList(u8){}, .allocator = allocator };
+        return .{ .data = std.ArrayList(u8).empty, .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeRenderBuffer) void {
@@ -77,7 +75,7 @@ const NativeRenderBuffer = struct {
     }
 
     pub fn print(self: *NativeRenderBuffer, comptime fmt: []const u8, args: anytype) void {
-        std.fmt.format(self.data.writer(self.allocator), fmt, args) catch {};
+        self.data.print(self.allocator, fmt, args) catch {};
     }
 
     pub fn moveTo(self: *NativeRenderBuffer, x: usize, y: usize) void {
@@ -85,11 +83,6 @@ const NativeRenderBuffer = struct {
     }
 
     pub fn flush(self: *NativeRenderBuffer) void {
-        var remaining = self.data.items;
-        while (remaining.len > 0) {
-            const n = posix.write(posix.STDOUT_FILENO, remaining) catch return;
-            if (n == 0) return;
-            remaining = remaining[n..];
-        }
+        @import("stdout.zig").writeAll(self.data.items);
     }
 };

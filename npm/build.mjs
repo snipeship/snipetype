@@ -21,7 +21,7 @@ for (const { zig, npm, ext } of TARGETS) {
   console.log(`Building for ${zig}...`);
 
   try {
-    execSync(`zig build -Doptimize=ReleaseSafe -Dtarget=${zig}`, {
+    execSync(`zig build -Doptimize=safe -Dtarget=${zig}`, {
       cwd: root,
       stdio: "inherit",
     });

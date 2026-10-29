@@ -1,7 +1,13 @@
-//! ANSI escape sequence renderer for native terminals.
-//! Buffers output and flushes to stdout.
+//! ANSI escape sequence renderer.
+//! Buffers output; on native targets `flush` writes it to stdout, on wasm
+//! the bytes are kept for the JS host to drain (see `output`/`clearBuffer`)
+//! and hand to the browser terminal emulator (ghostty-web).
 
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// On wasm there is no stdout: frames accumulate until the host drains them.
+const is_wasm = builtin.target.cpu.arch.isWasm();
 const Color = @import("../ui/color.zig").Color;
 const Renderer = @import("renderer.zig").Renderer;
 
@@ -16,7 +22,7 @@ pub const AnsiRenderer = struct {
 
     pub fn init(allocator: std.mem.Allocator, width: usize, height: usize) AnsiRenderer {
         return .{
-            .data = std.ArrayList(u8){},
+            .data = std.ArrayList(u8).empty,
             .allocator = allocator,
             .term_width = width,
             .term_height = height,
@@ -51,6 +57,7 @@ pub const AnsiRenderer = struct {
         .setFg = setFg,
         .setBg = setBg,
         .setBold = setBold,
+        .setUnderline = setUnderline,
         .resetStyle = resetStyle,
         .write = write,
         .writeByte = writeByte,
@@ -85,6 +92,11 @@ pub const AnsiRenderer = struct {
         } else {
             self.appendSlice("\x1b[22m");
         }
+    }
+
+    fn setUnderline(ptr: *anyopaque, on: bool) void {
+        const self = cast(ptr);
+        self.appendSlice(if (on) "\x1b[4m" else "\x1b[24m");
     }
 
     fn resetStyle(ptr: *anyopaque) void {
@@ -143,14 +155,10 @@ pub const AnsiRenderer = struct {
     fn flush(ptr: *anyopaque) void {
         const self = cast(ptr);
         if (self.data.items.len == 0) return;
+        // wasm: keep the bytes; the host reads `output()` after the tick.
+        if (comptime is_wasm) return;
 
-        const posix = std.posix;
-        var remaining = self.data.items;
-        while (remaining.len > 0) {
-            const n = posix.write(posix.STDOUT_FILENO, remaining) catch return;
-            if (n == 0) return;
-            remaining = remaining[n..];
-        }
+        @import("stdout.zig").writeAll(self.data.items);
         self.data.clearRetainingCapacity();
     }
 
@@ -188,7 +196,7 @@ pub const AnsiRenderer = struct {
     }
 
     fn appendFmt(self: *AnsiRenderer, comptime fmt: []const u8, args: anytype) void {
-        std.fmt.format(self.data.writer(self.allocator), fmt, args) catch {};
+        self.data.print(self.allocator, fmt, args) catch {};
     }
 
     // ========================================================================
@@ -214,4 +222,71 @@ pub const AnsiRenderer = struct {
     pub fn clearBuffer(self: *AnsiRenderer) void {
         self.data.clearRetainingCapacity();
     }
+
+    /// Bytes buffered since the last flush (native) or drain (wasm).
+    /// Valid until the next renderer call.
+    pub fn output(self: *const AnsiRenderer) []const u8 {
+        return self.data.items;
+    }
+
+    /// Set the cursor shape with DECSCUSR (steady block or steady bar).
+    pub fn setCursorShape(self: *AnsiRenderer, shape: CursorShape) void {
+        self.appendSlice(switch (shape) {
+            .block => "\x1b[2 q",
+            .underline => "\x1b[4 q",
+            .bar => "\x1b[6 q",
+        });
+    }
 };
+
+pub const CursorShape = enum { block, underline, bar };
+
+test "buffers escape sequences until drained" {
+    var ar = AnsiRenderer.init(std.testing.allocator, 10, 3);
+    defer ar.deinit();
+    ar.renderer().setUseTerminalDefaults(true);
+    const r = ar.renderer();
+    ar.beginSync();
+    r.moveTo(2, 1);
+    r.setFg(.{ .r = 1, .g = 2, .b = 3 });
+    r.write("hi");
+    ar.endSync();
+    try std.testing.expectEqualStrings("\x1b[?2026h\x1b[2;3H\x1b[38;2;1;2;3mhi\x1b[?2026l", ar.output());
+    ar.clearBuffer();
+    try std.testing.expectEqual(@as(usize, 0), ar.output().len);
+}
+
+test "terminal-default clear emits erase only" {
+    var ar = AnsiRenderer.init(std.testing.allocator, 4, 2);
+    defer ar.deinit();
+    ar.renderer().setUseTerminalDefaults(true);
+    ar.renderer().clear();
+    try std.testing.expectEqualStrings("\x1b[2J\x1b[H", ar.output());
+}
+
+test "themed clear paints every cell" {
+    var ar = AnsiRenderer.init(std.testing.allocator, 4, 2);
+    defer ar.deinit();
+    ar.renderer().clear();
+    try std.testing.expectEqual(@as(usize, 8), std.mem.count(u8, ar.output(), " "));
+}
+
+test "underline emits SGR 4/24 and reset clears it" {
+    var ar = AnsiRenderer.init(std.testing.allocator, 4, 2);
+    defer ar.deinit();
+    ar.renderer().setUseTerminalDefaults(true);
+    const r = ar.renderer();
+    r.setUnderline(true);
+    r.write("a");
+    r.setUnderline(false);
+    r.resetStyle();
+    try std.testing.expectEqualStrings("\x1b[4ma\x1b[24m\x1b[0m", ar.output());
+}
+
+test "cursor shape" {
+    var ar = AnsiRenderer.init(std.testing.allocator, 4, 2);
+    defer ar.deinit();
+    ar.setCursorShape(.bar);
+    ar.setCursorShape(.block);
+    try std.testing.expectEqualStrings("\x1b[6 q\x1b[2 q", ar.output());
+}

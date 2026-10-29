@@ -58,6 +58,7 @@ pub const Renderer = struct {
         setFg: *const fn (*anyopaque, Color) void,
         setBg: *const fn (*anyopaque, Color) void,
         setBold: *const fn (*anyopaque, bool) void,
+        setUnderline: *const fn (*anyopaque, bool) void,
         resetStyle: *const fn (*anyopaque) void,
         write: *const fn (*anyopaque, []const u8) void,
         writeByte: *const fn (*anyopaque, u8) void,
@@ -85,6 +86,11 @@ pub const Renderer = struct {
 
     pub inline fn setBold(self: Renderer, b: bool) void {
         self.vtable.setBold(self.ptr, b);
+    }
+
+    /// Underline on/off; `resetStyle` turns it off.
+    pub inline fn setUnderline(self: Renderer, on: bool) void {
+        self.vtable.setUnderline(self.ptr, on);
     }
 
     pub inline fn resetStyle(self: Renderer) void {
@@ -131,7 +137,7 @@ pub const Renderer = struct {
     /// Print formatted text
     pub fn print(self: Renderer, comptime fmt: []const u8, args: anytype) void {
         var buf: [512]u8 = undefined;
-        const slice = std.fmt.bufPrint(&buf, fmt, args) catch return;
+        const slice = std.mem.print(&buf, fmt, args) catch return;
         self.write(slice);
     }
 };

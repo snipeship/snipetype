@@ -1,513 +1,129 @@
-//! UI rendering functions using the abstract Renderer interface.
-//! Works with both AnsiRenderer (native) and CellRenderer (web).
+//! UI rendering for the classic (non-arcade) modes through the abstract
+//! `Renderer`. Both targets end in a real terminal (native, or ghostty-web in
+//! the browser), so rounded box drawing, braille and the other one-column
+//! UTF-8 glyphs from `ansi.zig` are used freely.
+//!
+//! `renderScreen` dispatches to one view per screen:
+//! - `typing_view`: words / sentences / code while waiting or typing;
+//! - `results`: the results card once a simple-mode test finished;
+//! - `vim_view`: vim `.type` (retype the ghost target), results below;
+//! - `drill_view`: vim `.drills` (edit the buffer to match the goal);
+//! - `history_view`: the history overlay (`UiState.overlay == .history`),
+//!   drawn instead of any of the above.
+//!
+//! Screens are chosen with the test's `vimKind()` (contract C3), so code
+//! typed with vim keys uses `vim_view` like vim `.type`.
+//!
+//! Shared chrome (frame, header, footer hints, cards) lives in `draw.zig`.
+//! Everything comes from the `TypingTest` (its `Session`, `live(now)` and
+//! `result()`) and the App's `UiState`; the only state kept between frames
+//! is the live WPM held for half a second (`typing_view.shown_wpm`). Every
+//! view degrades down to a 30x8 terminal; below `MIN_WIDTH` x `MIN_HEIGHT`
+//! (`MIN_HEIGHT_VIM` for the vim views) only a "terminal too small" notice
+//! is drawn.
 
-const theme_mod = @import("theme.zig");
-const Color = @import("color.zig").Color;
+const std = @import("std");
+
+const Theme = @import("theme.zig").Theme;
 const Renderer = @import("../platform/renderer.zig").Renderer;
 const TypingTest = @import("../core/typing_test.zig").TypingTest;
+const drill_mod = @import("../vim/drill.zig");
+const time = @import("../platform/time.zig");
+const draw = @import("draw.zig");
+const typing_view = @import("typing_view.zig");
+const results = @import("results.zig");
+const vim_view = @import("vim_view.zig");
+const drill_view = @import("drill_view.zig");
+const history_view = @import("history_view.zig");
+const anim = @import("anim.zig");
+const query = @import("query.zig");
 
-// ============================================================================
-// Common UI Elements
-// ============================================================================
+pub const UiState = @import("ui_state.zig").UiState;
 
-/// Render the header at top center
-fn renderHeader(r: Renderer, cx: usize, theme: *const theme_mod.Theme) void {
-    r.moveTo(cx -| 4, 1);
-    r.setBold(true);
-    r.setFg(theme.accent);
-    r.write("snipetype");
-    r.resetStyle();
+pub const Screen = enum { typing, results, vim_type, drill, history };
+
+/// The screen drawn for `t` (a `*TypingTest` or a fixture) and `ui`.
+pub fn screenOf(t: anytype, ui: *const UiState) Screen {
+    if (ui.overlay == .history) return .history;
+    if (query.vimKind(t)) |k| return if (k == .drills) .drill else .vim_type;
+    if (t.state == .finished and t.result() != null) return .results;
+    return .typing;
 }
 
-/// Render a horizontal divider line
-fn renderDivider(r: Renderer, cx: usize, y: usize, theme: *const theme_mod.Theme) void {
+/// The App redraws this often while `animating` is true.
+pub const ANIM_FRAME_MS: i64 = 33;
+
+/// True while a results count-up, graph draw-in or PB sparkle needs frames
+/// (at most `anim.SPARKLE_MS` after `ui.finished_ms`).
+pub fn animating(t: *const TypingTest, ui: *const UiState, now_ms: i64) bool {
+    return animatingAny(t, ui, now_ms);
+}
+
+pub fn animatingAny(t: anytype, ui: *const UiState, now_ms: i64) bool {
+    if (ui.finished_ms == null or t.state != .finished or t.result() == null) return false;
+    switch (screenOf(t, ui)) {
+        .results, .vim_type => {},
+        .typing, .drill, .history => return false,
+    }
+    return anim.active(ui.finished_ms, now_ms, sparkles(ui));
+}
+
+/// A PB sparkle runs for a first result or a new best.
+pub fn sparkles(ui: *const UiState) bool {
+    return ui.pb == .first or ui.pb == .improved;
+}
+
+fn catalogOf(t: *const TypingTest) drill_view.Catalog {
+    const ch = t.drill.challenge orelse return .{ .total = drill_mod.all.len };
+    return .{ .index = drill_mod.indexOf(ch.id) orelse 0, .total = drill_mod.all.len };
+}
+
+/// Draw the whole classic-mode screen for the test's current state.
+pub fn renderScreen(r: Renderer, t: *TypingTest, theme: *const Theme, ui: *const UiState) void {
+    renderAt(r, t, theme, ui, time.milliTimestamp());
+}
+
+/// Smallest terminal the views lay out in; below it (and below
+/// `MIN_HEIGHT_VIM` rows for the vim views, whose buffer, stats and status
+/// rows would overlap) only a notice is drawn. Writing a full layout into a
+/// smaller terminal would run past its right edge, and the terminal's
+/// autowrap would scroll the screen.
+pub const MIN_WIDTH: usize = 20;
+pub const MIN_HEIGHT: usize = 5;
+pub const MIN_HEIGHT_VIM: usize = 7;
+
+fn tooSmall(t: *const TypingTest, ui: *const UiState, w: usize, h: usize) bool {
+    const min_h = switch (screenOf(t, ui)) {
+        .vim_type, .drill => MIN_HEIGHT_VIM,
+        .typing, .results, .history => MIN_HEIGHT,
+    };
+    return w < MIN_WIDTH or h < min_h;
+}
+
+fn renderTooSmall(r: Renderer, theme: *const Theme) void {
     const w = r.width();
-    const div_width = @min(40, w -| 4); // Leave 2 char margin on each side
-    const start_x = cx -| (div_width / 2);
-
-    r.moveTo(start_x, y);
-    r.setFg(theme.dimmer);
-    var i: usize = 0;
-    while (i < div_width) : (i += 1) r.write("-");
+    const h = r.height();
+    draw.clearRows(r, 0, h -| 1);
+    if (w == 0 or h == 0) return;
+    const msg = "terminal too small";
+    // Never the last column: a glyph there could wrap on some terminals.
+    const max = w -| 1;
+    const len = @min(msg.len, max);
+    r.moveTo((w -| len) / 2, h / 2);
+    draw.pen(r, theme.dim, null, false);
+    _ = draw.writeClip(r, msg, max);
     r.resetStyle();
 }
 
-/// Render timer display (handles both countdown and elapsed time)
-fn renderTimer(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    if (t.config.time_limit > 0) {
-        const rem = t.getRemainingSeconds();
-        if (rem <= 5) {
-            r.setFg(theme.danger);
-            r.setBold(true);
-        } else if (rem <= 10) {
-            r.setFg(theme.extra);
-        } else {
-            r.setFg(theme.dim);
-        }
-        r.print("{d:.1}s", .{rem});
-    } else {
-        r.setFg(theme.dim);
-        r.print("{d:.1}s", .{t.getElapsedSeconds()});
-    }
-    r.resetStyle();
-}
-
-/// Render live WPM display
-fn renderWPM(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    const wpm = t.getLiveWPM();
-    if (wpm > 0) {
-        r.write("  ");
-        r.setFg(theme.accent);
-        r.print("{d:.0}", .{wpm});
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" wpm");
-        r.resetStyle();
-    }
-}
-
-// ============================================================================
-// Main Render Functions
-// ============================================================================
-
-/// Render simple mode (words/sentences/code)
-pub fn renderSimple(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    const cx = r.width() / 2;
-    const cy = r.height() / 2;
-
-    // Clear header and mode lines to avoid stale content
-    r.moveTo(0, 1);
-    r.clearLine();
-    r.moveTo(0, 2);
-    r.clearLine();
-
-    renderHeader(r, cx, theme);
-
-    r.moveTo(cx -| 10, 2);
-    r.setFg(theme.dim);
-    r.write(t.config.mode.name());
-    if (t.config.mode == .code) {
-        r.write(" . ");
-        r.write(t.config.lang.name());
-    }
-    if (t.config.time_limit > 0) {
-        r.print(" . {d}s", .{t.config.time_limit});
-    }
-    r.resetStyle();
-
-    renderDivider(r, cx, 4, theme);
-
-    r.moveTo(0, cy -| 2);
-    r.clearLine();
-    r.moveTo(cx -| 15, cy -| 2);
-
-    switch (t.state) {
-        .waiting => {
-            r.setFg(theme.dim);
-            r.write("start typing...");
-            r.resetStyle();
-        },
-        .typing => {
-            renderTimer(r, t, theme);
-            renderWPM(r, t, theme);
-
-            if (t.target_text.len > 0) {
-                const pct = @as(f64, @floatFromInt(t.typed.items.len)) / @as(f64, @floatFromInt(t.target_text.len)) * 100;
-                r.write("  ");
-                r.setFg(theme.dimmer);
-                r.print("{d:.0}%", .{pct});
-                r.resetStyle();
-            }
-        },
-        .finished => {
-            r.setFg(theme.success);
-            r.setBold(true);
-            r.write("complete!");
-            r.resetStyle();
-        },
-    }
-
-    r.moveTo(0, cy);
-    r.clearLine();
-
-    const target = t.target_text;
-    const typed = t.typed.items;
-    const max_w = r.width() -| 4;
-    const text_len = @max(target.len, typed.len);
-    const start_x = if (text_len < max_w) (r.width() -| text_len) / 2 else 2;
-
-    r.moveTo(start_x, cy);
-
-    for (0..target.len) |idx| {
-        if (idx < typed.len) {
-            if (idx == t.cursor_pos) {
-                r.setBg(theme.cursor_bg);
-                r.setFg(theme.cursor_fg);
-            } else if (typed[idx] == target[idx]) {
-                r.setFg(theme.success);
-            } else {
-                r.setBg(theme.error_bg);
-                r.setFg(theme.danger);
-            }
-            r.writeByte(typed[idx]);
-            r.resetStyle();
-        } else if (idx == t.cursor_pos) {
-            r.setBg(theme.cursor_bg);
-            r.setFg(theme.cursor_fg);
-            r.writeByte(target[idx]);
-            r.resetStyle();
-        } else {
-            r.setFg(theme.dim);
-            r.writeByte(target[idx]);
-            r.resetStyle();
-        }
-    }
-
-    if (t.state == .finished) {
-        renderResults(r, t, theme, cy);
-    }
-
-    renderFooter(r, t, theme);
-}
-
-/// Render vim mode
-pub fn renderVim(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    const cx = r.width() / 2;
-    const target_lines = t.target_lines.items;
-    const vim = &t.vim;
-
-    const total_lines = @max(target_lines.len, vim.buffer.lineCount());
-    const start_y = (r.height() -| total_lines -| 6) / 2 + 3;
-
-    // Clear content area to avoid stale text
-    const content_start_y: usize = 4;
-    const content_end_y: usize = r.height() -| 3;
-    if (content_end_y >= content_start_y) {
-        var y: usize = content_start_y;
-        while (y <= content_end_y) : (y += 1) {
-            r.moveTo(0, y);
-            r.clearLine();
-        }
-    }
-
-    // Clear header and status lines to avoid stale content
-    r.moveTo(0, 1);
-    r.clearLine();
-    r.moveTo(0, 2);
-    r.clearLine();
-    r.moveTo(0, 3);
-    r.clearLine();
-
-    renderHeader(r, cx, theme);
-
-    r.moveTo(cx -| 15, 2);
-    r.setFg(theme.dim);
-    r.write("vim");
-    r.resetStyle();
-    r.write(" . ");
-    r.write(t.config.lang.name());
-    r.write(" . ");
-
-    switch (vim.mode) {
-        .normal => {
-            r.setFg(theme.warning);
-            r.setBold(true);
-            r.write("NORMAL");
-            r.resetStyle();
-        },
-        .insert => {
-            r.setFg(theme.success);
-            r.setBold(true);
-            r.write("INSERT");
-            r.resetStyle();
-        },
-        .visual => {
-            r.setFg(theme.info);
-            r.setBold(true);
-            r.write("VISUAL");
-            r.resetStyle();
-        },
-        .visual_line => {
-            r.setFg(theme.info);
-            r.setBold(true);
-            r.write("V-LINE");
-            r.resetStyle();
-        },
-    }
-
-    if (t.config.time_limit > 0) {
-        r.setFg(theme.dim);
-        r.print(" . {d}s", .{t.config.time_limit});
-        r.resetStyle();
-    }
-
-    r.moveTo(0, 3);
-    r.clearLine();
-    r.moveTo(cx -| 15, 3);
-    switch (t.state) {
-        .waiting => {
-            r.setFg(theme.dim);
-            r.write("press i to start typing...");
-            r.resetStyle();
-        },
-        .typing => {
-            renderTimer(r, t, theme);
-            renderWPM(r, t, theme);
-
-            r.write("  ");
-            r.setFg(theme.dimmer);
-            r.print("L{d}:C{d}", .{ vim.cursor.row + 1, vim.cursor.col + 1 });
-            r.resetStyle();
-        },
-        .finished => {
-            r.setFg(theme.success);
-            r.setBold(true);
-            r.write("complete!");
-            r.resetStyle();
-        },
-    }
-
-    var max_line_len: usize = 0;
-    for (target_lines) |line| {
-        if (line.len > max_line_len) max_line_len = line.len;
-    }
-    for (0..vim.buffer.lineCount()) |row| {
-        const line = vim.buffer.getLine(row);
-        if (line.len > max_line_len) max_line_len = line.len;
-    }
-
-    const max_w = r.width() -| 8;
-    const display_width = @min(max_line_len + 4, max_w);
-    const start_x = (r.width() -| display_width) / 2;
-
-    const max_display_lines = @min(total_lines, r.height() -| 10);
-
-    for (0..max_display_lines) |row| {
-        const y = start_y + row;
-        r.moveTo(0, y);
-        r.clearLine();
-
-        r.moveTo(start_x -| 4, y);
-        r.setFg(theme.dimmer);
-        r.print("{d:>3} ", .{row + 1});
-        r.resetStyle();
-
-        r.moveTo(start_x, y);
-
-        const target_line = if (row < target_lines.len) target_lines[row] else "";
-        const typed_line = vim.buffer.getLine(row);
-
-        const line_len = @max(target_line.len, typed_line.len);
-        for (0..line_len) |col| {
-            const target_char: ?u8 = if (col < target_line.len) target_line[col] else null;
-            const typed_char: ?u8 = if (col < typed_line.len) typed_line[col] else null;
-            const is_cursor = vim.cursor.row == row and vim.cursor.col == col;
-            const in_visual = vim.isInVisualRange(row, col);
-
-            if (is_cursor) {
-                if (vim.mode == .insert) {
-                    r.setBg(theme.cursor_insert_bg);
-                    r.setFg(theme.cursor_fg);
-                } else {
-                    r.setBg(theme.cursor_bg);
-                    r.setFg(theme.cursor_fg);
-                }
-            } else if (in_visual) {
-                r.setBg(theme.visual_bg);
-                r.setFg(theme.visual_fg);
-            } else if (typed_char) |tc| {
-                if (target_char) |tgt| {
-                    if (tc == tgt) {
-                        r.setFg(theme.success);
-                    } else {
-                        r.setBg(theme.error_bg);
-                        r.setFg(theme.danger);
-                    }
-                } else {
-                    r.setFg(theme.extra);
-                }
-            } else {
-                r.setFg(theme.dim);
-            }
-
-            if (typed_char) |tc| {
-                r.writeByte(tc);
-            } else if (target_char) |tgt| {
-                r.writeByte(tgt);
-            } else {
-                r.write(" ");
-            }
-            r.resetStyle();
-        }
-
-        if (vim.cursor.row == row and vim.cursor.col >= line_len) {
-            if (vim.mode == .insert) {
-                r.setBg(theme.cursor_insert_bg);
-                r.write(" ");
-                r.resetStyle();
-            } else {
-                r.setBg(theme.cursor_bg);
-                r.write(" ");
-                r.resetStyle();
-            }
-        }
-    }
-
-    if (t.state == .finished) {
-        renderResults(r, t, theme, start_y + max_display_lines + 1);
-    }
-
-    renderFooter(r, t, theme);
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn renderResults(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme, y: usize) void {
-    const cx = r.width() / 2;
-    const wpm = t.getWPM();
-    const acc = t.getAccuracy();
-
-    r.moveTo(cx -| 10, y + 1);
-    r.clearLine();
-    r.moveTo(cx -| 10, y + 1);
-    r.setBold(true);
-    r.setFg(theme.accent);
-    r.print("{d:.0}", .{wpm});
-    r.resetStyle();
-    r.setFg(theme.dim);
-    r.write(" wpm  ");
-    r.resetStyle();
-
-    if (acc >= 97) {
-        r.setFg(theme.success);
-    } else if (acc >= 90) {
-        r.setFg(theme.warning);
-    } else {
-        r.setFg(theme.danger);
-    }
-    r.print("{d:.1}%", .{acc});
-    r.resetStyle();
-    r.setFg(theme.dim);
-    r.write(" acc");
-    r.resetStyle();
-
-    r.moveTo(cx -| 12, y + 3);
-    r.clearLine();
-    r.moveTo(cx -| 12, y + 3);
-    r.setFg(theme.dimmer);
-    r.print("{d:.2}s . {d}/{d} chars", .{ t.getElapsedSeconds(), t.correct_chars, t.target_text.len });
-    if (t.errors > 0) {
-        r.resetStyle();
-        r.write(" . ");
-        r.setFg(theme.danger);
-        r.print("{d} errors", .{t.errors});
-    }
-    r.resetStyle();
-
-    r.moveTo(cx -| 7, y + 5);
-    r.setFg(theme.accent);
-    r.write("tab");
-    r.resetStyle();
-    r.setFg(theme.dimmer);
-    r.write(" restart");
-    r.resetStyle();
-}
-
-fn renderFooter(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void {
-    const w = r.width();
-    const cx = w / 2;
-
-    renderDivider(r, cx, r.height() -| 2, theme);
-
-    // Clear footer line
-    r.moveTo(0, r.height());
-    r.clearLine();
-
-    // Adaptive footer based on screen width
-    const is_vim = t.config.mode == .vim;
-    const is_vim_insert = is_vim and t.vim.mode == .insert and t.state != .finished;
-
-    // Calculate content and center it
-    // Minimal: "tab  ctrl+c" (11 chars)
-    // Small: "tab new  ctrl+c quit" (20 chars)
-    // Medium: add "ctrl+p settings" (36 chars)
-    // Full vim: add "esc normal  v/V visual" (58 chars)
-
-    if (w < 30) {
-        // Minimal - just essential keys
-        r.moveTo(cx -| 5, r.height());
-        r.setFg(theme.dim);
-        r.write("tab");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write("  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+c");
-        r.resetStyle();
-    } else if (w < 50) {
-        // Small screen
-        r.moveTo(cx -| 10, r.height());
-        r.setFg(theme.dim);
-        r.write("tab");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+c");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" quit");
-        r.resetStyle();
-    } else if (w < 70 or !is_vim) {
-        // Medium screen or non-vim mode
-        r.moveTo(cx -| 18, r.height());
-        r.setFg(theme.dim);
-        r.write("tab");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+p");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" settings  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+c");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" quit");
-        r.resetStyle();
-    } else {
-        // Full vim footer
-        r.moveTo(cx -| 29, r.height());
-        r.setFg(theme.dim);
-        r.write("tab");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        if (is_vim_insert) r.write(" indent  ") else r.write(" new  ");
-        r.setFg(theme.dim);
-        r.write("esc");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" normal  ");
-        r.setFg(theme.dim);
-        r.write("v/V");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" visual  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+p");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" settings  ");
-        r.setFg(theme.dim);
-        r.write("ctrl+c");
-        r.resetStyle();
-        r.setFg(theme.dimmer);
-        r.write(" quit");
-        r.resetStyle();
+/// `renderScreen` at a given clock (tests).
+pub fn renderAt(r: Renderer, t: *TypingTest, theme: *const Theme, ui: *const UiState, now_ms: i64) void {
+    if (tooSmall(t, ui, r.width(), r.height())) return renderTooSmall(r, theme);
+    switch (screenOf(t, ui)) {
+        .history => history_view.render(r, theme, t.config, ui),
+        .typing => typing_view.render(r, theme, t, ui, now_ms),
+        .results => results.renderAnimated(r, theme, t.result().?, t.config, ui, now_ms),
+        .vim_type => vim_view.render(r, theme, t, ui, now_ms),
+        .drill => drill_view.render(r, theme, t, ui, catalogOf(t), now_ms),
     }
 }
 
@@ -518,54 +134,40 @@ fn renderFooter(r: Renderer, t: *TypingTest, theme: *const theme_mod.Theme) void
 pub const CursorPos = struct {
     x: usize,
     y: usize,
+    visible: bool = true,
 };
 
-/// Get the screen position where the typing cursor should be
-pub fn getCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
-    if (t.config.mode == .vim) {
-        return getVimCursorPos(t, width, height);
-    } else {
-        return getSimpleCursorPos(t, width, height);
+/// Where the hardware cursor goes: the typing caret, the (scrolled) vim
+/// cursor, the command line or the drill buffer pane's cursor. Hidden on
+/// results and the history screen. Call after `renderScreen` (the editor
+/// viewport is set there).
+pub fn getCursorPos(t: *TypingTest, ui: *const UiState, width: usize, height: usize) CursorPos {
+    if (tooSmall(t, ui, width, height)) return .{ .x = 0, .y = 0, .visible = false };
+    switch (screenOf(t, ui)) {
+        .history => return .{ .x = 0, .y = draw.frameFor(width, height).footer_y, .visible = false },
+        .typing => {
+            const p = typing_view.cursorPos(t, width, height);
+            return .{ .x = p.x, .y = p.y };
+        },
+        .results => return .{ .x = 0, .y = draw.frameFor(width, height).footer_y, .visible = false },
+        .vim_type => {
+            const p = vim_view.cursorPos(t, width, height);
+            return .{ .x = p.x, .y = p.y, .visible = p.visible };
+        },
+        .drill => {
+            const p = drill_view.cursorPos(t, width, height);
+            return .{ .x = p.x, .y = p.y, .visible = p.visible };
+        },
     }
 }
 
-fn getSimpleCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
-    const cy = height / 2;
-    const target = t.target_text;
-    const typed_len = t.typed.items.len;
-    const max_w = width -| 4;
-    const text_len = @max(target.len, typed_len);
-    const start_x = if (text_len < max_w) (width -| text_len) / 2 else 2;
-
-    return .{
-        .x = start_x + t.cursor_pos,
-        .y = cy,
-    };
-}
-
-fn getVimCursorPos(t: *TypingTest, width: usize, height: usize) CursorPos {
-    const target_lines = t.target_lines.items;
-    const vim = &t.vim;
-
-    const total_lines = @max(target_lines.len, vim.buffer.lineCount());
-    const start_y = (height -| total_lines -| 6) / 2 + 3;
-
-    // Calculate max line length for centering
-    var max_line_len: usize = 0;
-    for (target_lines) |line| {
-        if (line.len > max_line_len) max_line_len = line.len;
-    }
-    for (0..vim.buffer.lineCount()) |row| {
-        const line = vim.buffer.getLine(row);
-        if (line.len > max_line_len) max_line_len = line.len;
-    }
-
-    const max_w = width -| 8;
-    const display_width = @min(max_line_len + 4, max_w);
-    const start_x = (width -| display_width) / 2;
-
-    return .{
-        .x = start_x + vim.cursor.col,
-        .y = start_y + vim.cursor.row,
-    };
+test {
+    _ = anim;
+    _ = query;
+    _ = history_view;
+    _ = draw;
+    _ = typing_view;
+    _ = results;
+    _ = vim_view;
+    _ = drill_view;
 }

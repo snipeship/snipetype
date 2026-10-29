@@ -1,0 +1,61 @@
+//! Drills for the "line" lesson.
+
+const Challenge = @import("../drill.zig").Challenge;
+
+pub const list = [_]Challenge{
+    .{
+        .id = "line/dollar-01",
+        .lesson = .line,
+        .title = "Double semicolon",
+        .prompt = "Delete the last char",
+        .start = "    |return x + y;;",
+        .goal = "    return x + y;",
+        .par = 2,
+        .solutions = &.{"$x"},
+        .why = "$ jumps to the end of the line",
+    },
+    .{
+        .id = "line/caret-01",
+        .lesson = .line,
+        .title = "Rename the call",
+        .prompt = "Replace foo with bar",
+        .start = "    foo(|x)",
+        .goal = "    bar(x)",
+        .par = 7,
+        .solutions = &.{"^cwbar<Esc>"},
+        .why = "^ jumps to the first non-blank, past the indent",
+    },
+    .{
+        .id = "line/percent-01",
+        .lesson = .line,
+        .title = "Drop the call args",
+        .prompt = "Delete the argument list",
+        .start = "|result = compute(a, (b + c) * d);",
+        .goal = "result = compute;",
+        .par = 4,
+        .solutions = &.{"f(d%"},
+        .why = "% jumps to the matching bracket, so d% deletes a balanced group",
+    },
+    .{
+        .id = "line/G-01",
+        .lesson = .line,
+        .title = "Leftover print",
+        .prompt = "Delete the last line",
+        .start = "|import os\nimport sys\n\ndef main():\n    pass\nprint(1)",
+        .goal = "import os\nimport sys\n\ndef main():\n    pass",
+        .par = 3,
+        .solutions = &.{"Gdd"},
+        .why = "G jumps to the last line",
+    },
+    .{
+        .id = "line/gg-01",
+        .lesson = .line,
+        .title = "No shebang",
+        .prompt = "Delete the first line",
+        .start = "#!/bin/sh\necho hi\n|exit 0",
+        .goal = "echo hi\nexit 0",
+        .par = 4,
+        .solutions = &.{"ggdd"},
+        .why = "gg jumps to the first line",
+    },
+};

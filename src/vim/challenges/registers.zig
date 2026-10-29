@@ -1,0 +1,61 @@
+//! Drills for the "registers" lesson.
+
+const Challenge = @import("../drill.zig").Challenge;
+
+pub const list = [_]Challenge{
+    .{
+        .id = "registers/swap-lines",
+        .lesson = .registers,
+        .title = "Swap lines",
+        .prompt = "Put a before b",
+        .start = "|b\na",
+        .goal = "a\nb",
+        .par = 3,
+        .solutions = &.{"ddp"},
+        .why = "dd puts the line in a register; p puts it back below",
+    },
+    .{
+        .id = "registers/xp-01",
+        .lesson = .registers,
+        .title = "Transposed",
+        .prompt = "Fix the typo",
+        .start = "fn m|ian() {}",
+        .goal = "fn main() {}",
+        .par = 2,
+        .solutions = &.{"xp"},
+        .why = "xp swaps two chars: delete one, put it after the next",
+    },
+    .{
+        .id = "registers/yyp-01",
+        .lesson = .registers,
+        .title = "Second binding",
+        .prompt = "Copy the line and rename a to b",
+        .start = "|let a = 0;",
+        .goal = "let a = 0;\nlet b = 0;",
+        .par = 6,
+        .solutions = &.{"yypwrb"},
+        .why = "yy yanks the line, p puts the copy below",
+    },
+    .{
+        .id = "registers/blackhole-01",
+        .lesson = .registers,
+        .title = "Keep the keeper",
+        .prompt = "Move 'keep' to the end, throw 'trash' away",
+        .start = "|keep\ntrash\nend",
+        .goal = "end\nkeep",
+        .par = 7,
+        .solutions = &.{"dd\"_ddp"},
+        .why = "\"_ deletes without touching the register you're about to put",
+    },
+    .{
+        .id = "registers/named-01",
+        .lesson = .registers,
+        .title = "Two headers",
+        .prompt = "Replace 'old' with a copy of the header",
+        .start = "|// header\nold\nbody",
+        .goal = "// header\n// header\nbody",
+        .par = 10,
+        .solutions = &.{"\"ayyjdd\"aP"},
+        .why = "\"a stores a yank that later deletes won't overwrite",
+    },
+};

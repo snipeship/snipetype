@@ -6,6 +6,7 @@ const Color = @import("../ui/color.zig").Color;
 const renderer_mod = @import("renderer.zig");
 const Renderer = renderer_mod.Renderer;
 const Cell = renderer_mod.Cell;
+const CellFlags = renderer_mod.CellFlags;
 
 pub const CellRenderer = struct {
     cells: []Cell,
@@ -18,6 +19,7 @@ pub const CellRenderer = struct {
     default_fg: Color,
     default_bg: Color,
     is_bold: bool,
+    is_underline: bool = false,
     dirty: bool,
     dirty_min_x: usize,
     dirty_min_y: usize,
@@ -133,6 +135,7 @@ pub const CellRenderer = struct {
         .setFg = setFg,
         .setBg = setBg,
         .setBold = setBold,
+        .setUnderline = setUnderline,
         .resetStyle = resetStyle,
         .write = write,
         .writeByte = writeByte,
@@ -166,11 +169,17 @@ pub const CellRenderer = struct {
         self.is_bold = b;
     }
 
+    fn setUnderline(ptr: *anyopaque, on: bool) void {
+        const self = cast(ptr);
+        self.is_underline = on;
+    }
+
     fn resetStyle(ptr: *anyopaque) void {
         const self = cast(ptr);
         self.current_fg = self.default_fg;
         self.current_bg = self.default_bg;
         self.is_bold = false;
+        self.is_underline = false;
     }
 
     fn write(ptr: *anyopaque, s: []const u8) void {
@@ -268,7 +277,7 @@ pub const CellRenderer = struct {
         const idx = y * self.width + x;
         self.cells[idx] = .{
             .char = char,
-            .flags = if (self.is_bold) 1 else 0,
+            .flags = @bitCast(CellFlags{ .bold = self.is_bold, .underline = self.is_underline }),
             .fg_r = self.current_fg.r,
             .fg_g = self.current_fg.g,
             .fg_b = self.current_fg.b,

@@ -5,8 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot server.mjs",
-    "build:wasm": "cd .. && zig build web -Doptimize=ReleaseSmall && cp zig-out/bin/snipetype_web.wasm web/dist/",
-    "build": "npm run build:wasm"
+    "build:wasm": "cd .. && zig build web-dist",
+    "build": "bun run build:wasm",
+    "test": "bun test",
+    "vendor": "bun install --no-save && mkdir -p vendor/ghostty-web && cp node_modules/ghostty-web/dist/ghostty-web.js node_modules/ghostty-web/dist/__vite-browser-external-2447137e.js node_modules/ghostty-web/dist/index.d.ts node_modules/ghostty-web/LICENSE vendor/ghostty-web/ && echo 'vendored ghostty-web' $(node -p \"require('./node_modules/ghostty-web/package.json').version\")"
   },
-  "dependencies": {}
+  "//vendor": "ghostty-web is vendored (no bundler at runtime). To refresh: bump the pinned version below, run `bun run vendor`, update vendor/ghostty-web/VERSION, and check the __vite-browser-external-*.js filename in the new dist/.",
+  "devDependencies": {
+    "ghostty-web": "0.4.0-next.21.g640db46"
+  }
 }

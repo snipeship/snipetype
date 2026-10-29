@@ -1,4 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+comptime {
+    const min = std.SemanticVersion.parse("0.17.0") catch unreachable;
+    if (builtin.zig_version.order(min) == .lt)
+        @compileError("snipetype needs Zig 0.17.0 or newer (found " ++ builtin.zig_version_string ++ ")");
+}
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -12,10 +19,18 @@ pub fn build(b: *std.Build) void {
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
-    const optimize = b.standardOptimizeOption(.{});
+    // Defaults to ReleaseSafe rather than Debug: the arcade renders every
+    // frame on the CPU and a Debug build runs it at ~16 fps (62 ms/frame at
+    // 960 px wide vs ~9 ms in ReleaseSafe). Pass -Doptimize=debug to debug.
+    const optimize: std.builtin.Optimize = b.option(
+        std.builtin.Optimize,
+        "optimize",
+        "debug, safe (default), fast or small",
+    ) orelse switch (b.graph.release_mode) {
+        .off, .any, .safe => .safe,
+        .fast => .fast,
+        .small => .small,
+    };
     // It's also possible to define more custom flags to toggle optional features
     // of this build script using `b.option()`. All defined flags (including
     // target and optimize options) will be listed when running `zig build --help`
@@ -111,9 +126,7 @@ pub fn build(b: *std.Build) void {
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     // Creates an executable that will run `test` blocks from the provided module.
     // Here `mod` needs to define a target, which is why earlier we made sure to
@@ -164,8 +177,9 @@ pub fn build(b: *std.Build) void {
         .abi = .none,
     });
 
-    // Create the snipetype module for WASM target
-    const mod_wasm = b.addModule("snipetype", .{
+    // Create the snipetype module for WASM target. Private (createModule):
+    // the package exports only the native-target "snipetype" module above.
+    const mod_wasm = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = wasm_target,
         .optimize = optimize,
@@ -193,4 +207,45 @@ pub fn build(b: *std.Build) void {
     // Create 'web' build step
     const web_step = b.step("web", "Build the WebAssembly version for browsers");
     web_step.dependOn(&install_wasm.step);
+
+    // 'web-dist': ReleaseSmall wasm copied into web/dist/ (what the static
+    // host serves), independent of -Doptimize.
+    const mod_wasm_small = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = wasm_target,
+        .optimize = .small,
+    });
+    const wasm_small = b.addExecutable(.{
+        .name = "snipetype_web",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/web/main.zig"),
+            .target = wasm_target,
+            .optimize = .small,
+            .imports = &.{
+                .{ .name = "snipetype", .module = mod_wasm_small },
+            },
+        }),
+    });
+    wasm_small.rdynamic = true;
+    const copy_dist = b.addUpdateSourceFiles();
+    copy_dist.addCopyFileToSource(wasm_small.getEmittedBin(), "web/dist/snipetype_web.wasm");
+    const web_dist_step = b.step("web-dist", "Build ReleaseSmall wasm into web/dist/");
+    web_dist_step.dependOn(&copy_dist.step);
+
+    // ========================================================================
+    // Arcade preview (headless scene renderer → PPM frames)
+    // ========================================================================
+
+    const preview_exe = b.addExecutable(.{
+        .name = "arcade-preview",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/arcade_preview.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_preview = b.addRunArtifact(preview_exe);
+    run_preview.addPassthruArgs();
+    const preview_step = b.step("arcade-preview", "Render scripted arcade frames to PPM (zig build arcade-preview -- <outdir>)");
+    preview_step.dependOn(&run_preview.step);
 }

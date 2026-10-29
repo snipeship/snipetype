@@ -27,6 +27,46 @@ pub const Color = struct {
             0xFF;
     }
 
+    /// Linear blend from `self` (t = 0) to `other` (t = 1); `t` is clamped.
+    pub fn mix(self: Color, other: Color, t: f32) Color {
+        const k = std.math.clamp(t, 0.0, 1.0);
+        return .{
+            .r = mixChannel(self.r, other.r, k),
+            .g = mixChannel(self.g, other.g, k),
+            .b = mixChannel(self.b, other.b, k),
+        };
+    }
+
+    /// Relative luminance approximation in 0..1 (Rec. 601 weights, no gamma).
+    pub fn luma(self: Color) f32 {
+        return (0.299 * @as(f32, @floatFromInt(self.r)) +
+            0.587 * @as(f32, @floatFromInt(self.g)) +
+            0.114 * @as(f32, @floatFromInt(self.b))) / 255.0;
+    }
+
+    /// WCAG 2 contrast ratio between two colors (1..21).
+    pub fn contrast(self: Color, other: Color) f32 {
+        const a = self.relLuminance();
+        const b = other.relLuminance();
+        return (@max(a, b) + 0.05) / (@min(a, b) + 0.05);
+    }
+
+    /// WCAG relative luminance (sRGB, gamma-expanded).
+    fn relLuminance(self: Color) f32 {
+        return 0.2126 * linear(self.r) + 0.7152 * linear(self.g) + 0.0722 * linear(self.b);
+    }
+
+    fn linear(c: u8) f32 {
+        const v = @as(f32, @floatFromInt(c)) / 255.0;
+        return if (v <= 0.03928) v / 12.92 else std.math.pow(f32, (v + 0.055) / 1.055, 2.4);
+    }
+
+    fn mixChannel(a: u8, b: u8, t: f32) u8 {
+        const fa: f32 = @floatFromInt(a);
+        const fb: f32 = @floatFromInt(b);
+        return @intFromFloat(@round(fa + (fb - fa) * t));
+    }
+
     /// Write ANSI foreground escape sequence to buffer
     pub fn writeAnsiFg(self: Color, writer: anytype) !void {
         try writer.print("\x1b[38;2;{d};{d};{d}m", .{ self.r, self.g, self.b });
@@ -53,3 +93,19 @@ pub const Palette = struct {
     pub const DIM = Color.rgb(100, 100, 120);
     pub const DIMMER = Color.rgb(60, 60, 80);
 };
+
+test "mix blends and clamps" {
+    const a = Color.rgb(0, 100, 200);
+    const b = Color.rgb(200, 100, 0);
+    try std.testing.expectEqual(Color.rgb(100, 100, 100), a.mix(b, 0.5));
+    try std.testing.expectEqual(a, a.mix(b, -1));
+    try std.testing.expectEqual(b, a.mix(b, 2));
+    try std.testing.expect(Color.WHITE.luma() > 0.99 and Color.BLACK.luma() < 0.01);
+}
+
+test "contrast ratio" {
+    try std.testing.expectApproxEqAbs(@as(f32, 21), Color.WHITE.contrast(Color.BLACK), 0.01);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), a_gray.contrast(a_gray), 0.001);
+}
+
+const a_gray = Color.rgb(128, 128, 128);
